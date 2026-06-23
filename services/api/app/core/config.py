@@ -11,8 +11,11 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Raíz del repo appNomadaAI/ (…/app/services/api/app/core/config.py -> 5 padres)
-REPO_ROOT = Path(__file__).resolve().parents[5]
+# Raíz del repo appNomadaAI/ en desarrollo (…/app/services/api/app/core/config.py
+# -> 5 padres). En el contenedor la estructura es más plana y RESEARCH_DIR se pasa
+# por entorno, así que este cálculo es solo un fallback: no debe tronar si faltan padres.
+_HERE = Path(__file__).resolve()
+REPO_ROOT = _HERE.parents[5] if len(_HERE.parents) > 5 else _HERE.parent
 DEFAULT_RESEARCH_DIR = REPO_ROOT / "Research"
 
 
