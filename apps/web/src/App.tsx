@@ -9,15 +9,29 @@ import type {
 import { api } from "./lib/api";
 import { osmStyle, TUMACO_CENTER, TUMACO_ZOOM } from "./lib/mapStyle";
 
-type Vehicle = { key: string; label: string; emoji: string };
-const VEHICLES: Vehicle[] = [
-  { key: "moto", label: "Moto", emoji: "🏍️" },
-  { key: "carro", label: "Carro", emoji: "🚗" },
-  { key: "rappi", label: "Rappi", emoji: "🛵" },
-  { key: "indriver", label: "inDriver/Uber", emoji: "🚙" },
-];
-
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
+// El ícono/animación depende del TIPO REAL del viaje (una moto circula por calles
+// donde no entran carros; eso ya lo respeta la trayectoria real de ese tipo).
+function iconForType(t?: string): string {
+  switch ((t ?? "").toLowerCase()) {
+    case "mot": return "🏍️";
+    case "bus": return "🚌";
+    case "truck": return "🚚";
+    case "taxi": return "🚕";
+    default: return "🚗";
+  }
+}
+function labelForType(t?: string): string {
+  switch ((t ?? "").toLowerCase()) {
+    case "mot": return "Motocicleta";
+    case "bus": return "Bus";
+    case "truck": return "Camión";
+    case "taxi": return "Taxi";
+    case "car": return "Carro";
+    default: return t ?? "Vehículo";
+  }
+}
 
 export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -30,17 +44,21 @@ export default function App() {
   const lastPredRef = useRef(0);
   const alertedRef = useRef(false);
   const runningRef = useRef(false);
+  const typeRef = useRef("car");
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [tripId, setTripId] = useState("");
-  const [vehicle, setVehicle] = useState<Vehicle>(VEHICLES[0]);
   const [hour, setHour] = useState(20);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [predInfo, setPredInfo] = useState<string>("—");
+  const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notif, setNotif] = useState<{ title: string; body: string } | null>(null);
   const [finished, setFinished] = useState(false);
+
+  const selectedTrip = trips.find((t) => t.id === tripId);
+  const vehIcon = iconForType(selectedTrip?.type);
 
   // init map
   useEffect(() => {
@@ -62,12 +80,12 @@ export default function App() {
           id: "corridors",
           type: "line",
           source: "corridors",
-          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.25 },
+          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.22 },
         });
       } catch (e) {
         console.error(e);
       }
-      // capa de riesgo (heatmap por hora)
+      // capa de riesgo (heatmap espacio-temporal, cambia con la hora)
       map.addSource("risk", { type: "geojson", data: emptyFC() as never });
       map.addLayer({
         id: "risk",
@@ -75,8 +93,9 @@ export default function App() {
         source: "risk",
         paint: {
           "heatmap-weight": ["get", "risk_norm"],
-          "heatmap-radius": 34,
-          "heatmap-opacity": 0.55,
+          "heatmap-radius": 38,
+          "heatmap-intensity": 1.1,
+          "heatmap-opacity": 0.6,
           "heatmap-color": [
             "interpolate", ["linear"], ["heatmap-density"],
             0, "rgba(0,0,0,0)",
@@ -89,7 +108,14 @@ export default function App() {
       } as never);
       addLine(map, "observed", { "line-color": "#2f81f7", "line-width": 5 });
       addLine(map, "pred", { "line-color": "#f97316", "line-width": 4, "line-dasharray": [1.5, 1] });
-      addPoint(map, "danger", { "circle-radius": 12, "circle-color": "#ef4444", "circle-opacity": 0.35, "circle-stroke-color": "#ef4444", "circle-stroke-width": 2 });
+      // zona de incidencia DINÁMICA (se reubica/actualiza en cada paso)
+      addPoint(map, "danger", {
+        "circle-radius": 16,
+        "circle-color": "#ef4444",
+        "circle-opacity": 0.28,
+        "circle-stroke-color": "#ef4444",
+        "circle-stroke-width": 2,
+      });
       loadRisk(map, hour);
     });
 
@@ -126,11 +152,12 @@ export default function App() {
     stopSim();
     setFinished(false);
     setNotif(null);
+    setLiveRisk(null);
     setPredInfo("Detectando movimiento…");
     alertedRef.current = false;
     lastPredRef.current = 0;
     idxRef.current = 0;
-    // limpiar capas
+    typeRef.current = selectedTrip?.type ?? "car";
     setLine(map, "observed", []);
     setLine(map, "pred", []);
     setPoint(map, "danger", null);
@@ -148,13 +175,13 @@ export default function App() {
     await loadRisk(map, hour);
     map.flyTo({ center: coords[0], zoom: 15, duration: 800 });
 
-    // marcador del vehículo
+    // marcador del vehículo (ícono según el tipo real del viaje)
     if (!vehMarkerRef.current) {
       const el = document.createElement("div");
       el.className = "veh-marker";
       vehMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat(coords[0]).addTo(map);
     }
-    vehMarkerRef.current.getElement().textContent = vehicle.emoji;
+    vehMarkerRef.current.getElement().textContent = iconForType(typeRef.current);
     vehMarkerRef.current.setLngLat(coords[0]);
 
     runningRef.current = true;
@@ -171,30 +198,36 @@ export default function App() {
     const i = idxRef.current;
     const acc = coords.slice(0, i);
     setProgress(Math.round((i / coords.length) * 100));
-    // mover vehículo + dibujar recorrido observado (lo que el sistema ha "capturado")
+    // el sistema "detecta movimiento" y va capturando la trayectoria
     vehMarkerRef.current?.setLngLat(coords[i - 1]);
     setLine(map, "observed", acc);
 
-    // re-predecir cada ~500ms una vez que hay suficiente movimiento
+    // re-predicción ONLINE cada ~450 ms con lo capturado hasta ahora
     const now = performance.now();
-    if (acc.length >= 4 && now - lastPredRef.current > 500) {
+    if (acc.length >= 4 && now - lastPredRef.current > 450) {
       lastPredRef.current = now;
       try {
-        const res = await api_online(acc, vehicle, hour, tripId);
+        const res = await api_online(acc, typeRef.current, hour, tripId);
         const cand = res.candidates?.[0];
         if (cand) setLine(map, "pred", cand.geometry.coordinates as [number, number][]);
         const a = res.alert;
         if (a) {
+          setLiveRisk(a.risk_norm);
           setPredInfo(
-            `Ruta probable: ${cand ? cand.length_m.toFixed(0) : "?"} m · riesgo ${(a.risk_norm * 100).toFixed(0)}%`
+            `Ruta probable: ${cand ? cand.length_m.toFixed(0) : "?"} m · riesgo de la zona ${(a.risk_norm * 100).toFixed(0)}%`
           );
-          if (a.is_high && !alertedRef.current) {
-            alertedRef.current = true;
+          // zona de incidencia DINÁMICA: se reubica en cada paso según la predicción
+          if (a.is_high) {
             setPoint(map, "danger", [a.lon, a.lat]);
-            setNotif({
-              title: "⚠️ Alerta de seguridad — NómadaAI",
-              body: `Zona de alto riesgo en tu ruta a ~${a.distance_m.toFixed(0)} m (~${(a.eta_s ?? 0).toFixed(0)} s) a las ${String(a.hour).padStart(2, "0")}:00. Considera un desvío.`,
-            });
+            if (!alertedRef.current) {
+              alertedRef.current = true;
+              setNotif({
+                title: "⚠️ Alerta de seguridad — NómadaAI",
+                body: `Tu ruta probable entra en una zona de alto riesgo a ~${a.distance_m.toFixed(0)} m (~${(a.eta_s ?? 0).toFixed(0)} s), a las ${String(a.hour).padStart(2, "0")}:00. Considera un desvío.`,
+              });
+            }
+          } else {
+            setPoint(map, "danger", null);
           }
         }
       } catch (e) {
@@ -216,34 +249,25 @@ export default function App() {
       {/* Panel de control */}
       <div className="panel">
         <h1>NómadaAI</h1>
-        <p className="subtitle">Simulación en vivo · Tumaco, Nariño</p>
+        <p className="subtitle">Simulación de navegación · Tumaco, Nariño</p>
         <div className="status">
-          {health ? `${health.n_trajectories.toLocaleString()} viajes · riesgo por hora` : "Conectando…"}
+          {health ? `${health.n_trajectories.toLocaleString()} viajes · riesgo dinámico por hora` : "Conectando…"}
         </div>
 
         <h2>Recorrido simulado</h2>
-        <label className="lbl">Viaje (GPS en vivo)</label>
+        <label className="lbl">Viaje (se reproduce como tu GPS en vivo)</label>
         <select className="select" value={tripId} onChange={(e) => setTripId(e.target.value)} disabled={running}>
           {trips.map((t) => (
-            <option key={t.id} value={t.id}>{t.type} · {t.id} ({t.n_points} pts)</option>
+            <option key={t.id} value={t.id}>{iconForType(t.type)} {labelForType(t.type)} · {t.id} ({t.n_points} pts)</option>
           ))}
         </select>
+        {selectedTrip && (
+          <p className="hint" style={{ marginTop: 6 }}>
+            Vehículo: <b>{vehIcon} {labelForType(selectedTrip.type)}</b> — circula por las calles propias de su tipo.
+          </p>
+        )}
 
-        <label className="lbl">Vehículo</label>
-        <div className="veh-row">
-          {VEHICLES.map((v) => (
-            <button
-              key={v.key}
-              className={`veh-btn ${vehicle.key === v.key ? "on" : ""}`}
-              onClick={() => setVehicle(v)}
-              disabled={running}
-            >
-              <span>{v.emoji}</span>{v.label}
-            </button>
-          ))}
-        </div>
-
-        <label className="lbl">Hora del día (riesgo)</label>
+        <label className="lbl">Hora del día (riesgo dinámico)</label>
         <select className="select" value={hour} onChange={(e) => { const h = Number(e.target.value); setHour(h); if (mapRef.current) loadRisk(mapRef.current, h); }} disabled={running}>
           {HOURS.map((h) => (
             <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
@@ -263,7 +287,7 @@ export default function App() {
         <p className="legend">
           <span className="dot blue" /> capturado &nbsp;
           <span className="dot orange" /> predicho &nbsp;
-          <span className="dot red" /> riesgo
+          <span className="dot red" /> zona de riesgo
         </p>
       </div>
 
@@ -272,8 +296,15 @@ export default function App() {
         <div className="phone-notch" />
         <div className="phone-screen">
           <div className="phone-status">{String(hour).padStart(2, "0")}:00 · NómadaAI</div>
-          <div className="phone-veh">{vehicle.emoji}</div>
-          <div className="phone-sub">{running ? "Recorrido en curso…" : finished ? "Recorrido finalizado" : "En espera"}</div>
+          <div className="phone-veh">{vehIcon}</div>
+          <div className="phone-sub">
+            {running ? "Navegando…" : finished ? "Recorrido finalizado" : "En espera"}
+          </div>
+          {liveRisk != null && (
+            <div className={`risk-pill ${liveRisk >= 0.5 ? "hi" : ""}`}>
+              Riesgo de la zona: {(liveRisk * 100).toFixed(0)}%
+            </div>
+          )}
           {notif && (
             <div className="push">
               <div className="push-title">{notif.title}</div>
@@ -286,10 +317,10 @@ export default function App() {
   );
 }
 
-// Llamada directa al endpoint online (el cliente compartido aún no lo expone)
+// Llamada directa al endpoint de predicción online (streaming)
 async function api_online(
   acc: [number, number][],
-  vehicle: Vehicle,
+  type: string,
   hour: number,
   tripId: string
 ) {
@@ -299,7 +330,7 @@ async function api_online(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       points: acc.map(([lon, lat], i) => ({ lon, lat, t: i })),
-      type: vehicle.key,
+      type,
       hour,
       exclude_id: tripId,
       topk: 1,

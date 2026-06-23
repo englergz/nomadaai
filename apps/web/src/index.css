@@ -120,6 +120,8 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
   margin-top: auto; width: 100%; background: rgba(239,68,68,0.16); border: 1px solid #ef4444;
   border-radius: 12px; padding: 10px; animation: slidein 0.35s ease;
 }
+.risk-pill { margin-top: 14px; font-size: 11px; padding: 6px 10px; border-radius: 999px; background: rgba(45,212,191,0.18); color: #bdf5ec; border: 1px solid #2dd4bf; }
+.risk-pill.hi { background: rgba(239,68,68,0.18); color: #fecaca; border-color: #ef4444; }
 .push-title { font-size: 12px; font-weight: 700; color: #fecaca; }
 .push-body { font-size: 11px; color: #fde2e2; margin-top: 4px; line-height: 1.4; }
 @keyframes slidein { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
