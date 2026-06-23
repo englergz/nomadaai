@@ -45,6 +45,8 @@ export default function App() {
   const alertedRef = useRef(false);
   const runningRef = useRef(false);
   const typeRef = useRef("car");
+  const clockRef = useRef(0); // segundos desde medianoche (reloj de la simulación)
+  const speedRef = useRef(8.3); // m/s (~30 km/h)
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [trips, setTrips] = useState<TripSummary[]>([]);
@@ -53,6 +55,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [predInfo, setPredInfo] = useState<string>("—");
+  const [clock, setClock] = useState<number>(20 * 3600);
   const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notif, setNotif] = useState<{ title: string; body: string } | null>(null);
   const [finished, setFinished] = useState(false);
@@ -158,6 +161,8 @@ export default function App() {
     lastPredRef.current = 0;
     idxRef.current = 0;
     typeRef.current = selectedTrip?.type ?? "car";
+    clockRef.current = hour * 3600;
+    setClock(clockRef.current);
     setLine(map, "observed", []);
     setLine(map, "pred", []);
     setPoint(map, "danger", null);
@@ -194,10 +199,16 @@ export default function App() {
     const map = mapRef.current;
     if (!map || !runningRef.current) return;
     const coords = coordsRef.current;
+    const prev = idxRef.current;
     idxRef.current = Math.min(coords.length, idxRef.current + step);
     const i = idxRef.current;
     const acc = coords.slice(0, i);
     setProgress(Math.round((i / coords.length) * 100));
+    // el reloj avanza con la distancia recorrida (a la velocidad del vehículo)
+    let moved = 0;
+    for (let k = Math.max(1, prev); k < i; k++) moved += haversine(coords[k - 1], coords[k]);
+    clockRef.current += moved / speedRef.current;
+    setClock(clockRef.current);
     // el sistema "detecta movimiento" y va capturando la trayectoria
     vehMarkerRef.current?.setLngLat(coords[i - 1]);
     setLine(map, "observed", acc);
@@ -207,7 +218,7 @@ export default function App() {
     if (acc.length >= 4 && now - lastPredRef.current > 450) {
       lastPredRef.current = now;
       try {
-        const res = await api_online(acc, typeRef.current, hour, tripId);
+        const res = await api_online(acc, typeRef.current, clockRef.current, tripId, speedRef.current);
         const cand = res.candidates?.[0];
         if (cand) setLine(map, "pred", cand.geometry.coordinates as [number, number][]);
         const a = res.alert;
@@ -221,9 +232,10 @@ export default function App() {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (!alertedRef.current) {
               alertedRef.current = true;
+              const eta = `${String(a.hour).padStart(2, "0")}:${String(a.arrival_min ?? 0).padStart(2, "0")}`;
               setNotif({
                 title: "⚠️ Alerta de seguridad — NómadaAI",
-                body: `Tu ruta probable entra en una zona de alto riesgo a ~${a.distance_m.toFixed(0)} m (~${(a.eta_s ?? 0).toFixed(0)} s), a las ${String(a.hour).padStart(2, "0")}:00. Considera un desvío.`,
+                body: `Tu ruta probable entra en una zona de alto riesgo a ~${a.distance_m.toFixed(0)} m; llegarías a las ${eta} (${(a.eta_s ?? 0).toFixed(0)} s). Considera un desvío.`,
               });
             }
           } else {
@@ -251,11 +263,17 @@ export default function App() {
         <h1>NómadaAI</h1>
         <p className="subtitle">Simulación de navegación · Tumaco, Nariño</p>
         <div className="status">
-          {health ? `${health.n_trajectories.toLocaleString()} viajes · riesgo dinámico por hora` : "Conectando…"}
+          {health
+            ? `${(health.n_test ?? 0).toLocaleString()} viajes NO vistos por el modelo · riesgo dinámico`
+            : "Conectando…"}
         </div>
 
+        {running && (
+          <div className="clock">🕒 {fmtClock(clock)}</div>
+        )}
+
         <h2>Recorrido simulado</h2>
-        <label className="lbl">Viaje (se reproduce como tu GPS en vivo)</label>
+        <label className="lbl">Viaje no visto (se reproduce como tu GPS en vivo)</label>
         <select className="select" value={tripId} onChange={(e) => setTripId(e.target.value)} disabled={running}>
           {trips.map((t) => (
             <option key={t.id} value={t.id}>{iconForType(t.type)} {labelForType(t.type)} · {t.id} ({t.n_points} pts)</option>
@@ -263,7 +281,7 @@ export default function App() {
         </select>
         {selectedTrip && (
           <p className="hint" style={{ marginTop: 6 }}>
-            Vehículo: <b>{vehIcon} {labelForType(selectedTrip.type)}</b> — circula por las calles propias de su tipo.
+            <b>{vehIcon} {labelForType(selectedTrip.type)}</b> · <span className="tag-unseen">no visto</span> — el modelo nunca indexó este viaje (prueba sin sesgo).
           </p>
         )}
 
@@ -295,7 +313,7 @@ export default function App() {
       <div className="phone">
         <div className="phone-notch" />
         <div className="phone-screen">
-          <div className="phone-status">{String(hour).padStart(2, "0")}:00 · NómadaAI</div>
+          <div className="phone-status">{running || finished ? fmtClock(clock) : `${String(hour).padStart(2, "0")}:00`} · NómadaAI</div>
           <div className="phone-veh">{vehIcon}</div>
           <div className="phone-sub">
             {running ? "Navegando…" : finished ? "Recorrido finalizado" : "En espera"}
@@ -321,8 +339,9 @@ export default function App() {
 async function api_online(
   acc: [number, number][],
   type: string,
-  hour: number,
-  tripId: string
+  tSeconds: number,
+  tripId: string,
+  speedMps: number
 ) {
   const base = import.meta.env.VITE_API_URL ?? "";
   const res = await fetch(`${base}/predict/online`, {
@@ -331,13 +350,34 @@ async function api_online(
     body: JSON.stringify({
       points: acc.map(([lon, lat], i) => ({ lon, lat, t: i })),
       type,
-      hour,
+      t_seconds: tSeconds,
+      speed_mps: speedMps,
+      threshold: 0.7,
       exclude_id: tripId,
       topk: 1,
     }),
   });
   if (!res.ok) throw new Error(`online ${res.status}`);
   return res.json();
+}
+
+function haversine(a: [number, number], b: [number, number]): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+function fmtClock(sec: number): string {
+  const s = ((sec % 86400) + 86400) % 86400;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = Math.floor(s % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
 // ---------- helpers de mapa ----------

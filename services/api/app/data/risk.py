@@ -75,15 +75,13 @@ class RiskStore:
     def lookahead_alert(
         self,
         path: list[list[float]],   # [[lon,lat], ...] continuación predicha
-        hour: int,
-        threshold_norm: float = 0.5,
+        start_seconds: float,      # segundos desde medianoche en la posición actual
+        threshold_norm: float = 0.7,
         speed_mps: float = 8.3,    # ~30 km/h por defecto (configurable)
     ) -> dict | None:
-        """Mira la ruta predicha y devuelve la alerta anticipada.
-
-        Si alguna zona supera el umbral, devuelve la PRIMERA (aviso lo más temprano
-        posible, `is_high=True`). Si no, devuelve la de mayor riesgo de la ruta como
-        información (`is_high=False`). `distance_m`/`eta_s` = anticipación al punto.
+        """Alerta anticipada con reloj corriendo: el riesgo de cada zona se evalúa a la
+        HORA ESTIMADA DE LLEGADA (no a una hora fija). Devuelve la primera zona que supere
+        el umbral (aviso lo más temprano posible); si ninguna, la de mayor riesgo (info).
         """
         if not path:
             return None
@@ -93,15 +91,19 @@ class RiskStore:
         for i, pt in enumerate(path):
             if i > 0:
                 acc += _haversine_m(path[i - 1], path[i])
-            r, rn = self.risk_at(pt[0], pt[1], hour)
+            eta_s = acc / speed_mps if speed_mps else 0.0
+            arrival_s = start_seconds + eta_s
+            arrival_hour = int(arrival_s // 3600) % 24
+            r, rn = self.risk_at(pt[0], pt[1], arrival_hour)
             info = {
                 "lon": pt[0],
                 "lat": pt[1],
                 "risk": round(r, 2),
                 "risk_norm": round(rn, 4),
                 "distance_m": round(acc, 1),
-                "eta_s": round(acc / speed_mps, 1) if speed_mps else None,
-                "hour": int(hour) % 24,
+                "eta_s": round(eta_s, 1),
+                "hour": arrival_hour,
+                "arrival_min": int((arrival_s % 3600) // 60),
             }
             if rn >= threshold_norm and first_high is None:
                 first_high = {**info, "is_high": True}

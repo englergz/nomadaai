@@ -49,6 +49,11 @@ class OnlineRequest(BaseModel):
     points: list[TrajectoryPoint] = Field(..., min_length=2)
     type: Optional[str] = None
     hour: int = Field(default=19, ge=0, le=23)
+    # Reloj de la simulación: segundos desde medianoche en la posición ACTUAL.
+    # Si se envía, el riesgo se evalúa a la hora de llegada a cada zona.
+    t_seconds: Optional[float] = Field(default=None, ge=0, le=86400)
+    threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    speed_mps: float = Field(default=8.3, gt=0.0, le=40.0)
     exclude_id: Optional[str] = None
     topk: int = Field(default=1, ge=1, le=5)
 
@@ -61,6 +66,7 @@ class RiskAlert(BaseModel):
     distance_m: float
     eta_s: Optional[float] = None
     hour: int
+    arrival_min: int = 0
     is_high: bool
 
 

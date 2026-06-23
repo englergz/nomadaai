@@ -89,28 +89,43 @@ class DestinationPredictor:
         default_topk: int = 5,
         max_meters: float = 200.0,
         frac_miss: float = 0.25,
+        test_fraction: float = 0.2,
+        test_seed: int = 42,
     ) -> None:
         self.default_topk = default_topk
         self.max_meters = max_meters
         self.frac_miss = frac_miss
+        self.test_fraction = test_fraction
+        self.test_seed = test_seed
         self._load(parquet_path, max_trajectories)
 
     def _load(self, parquet_path: Path, max_trajectories: int) -> None:
+        import random
+
         df = pd.read_parquet(parquet_path)  # id, x, y, t (metros)
         if max_trajectories and max_trajectories > 0:
             keep = df["id"].drop_duplicates().head(max_trajectories)
             df = df[df["id"].isin(keep)]
 
-        # true_dict: id -> [(x, y, t), ...] ordenado por t
+        # true_dict: id -> [(x, y, t), ...] ordenado por t  (TODAS las trayectorias)
         self.true_dict: dict[str, list[tuple[float, float, float]]] = {}
         for tid, g in df.sort_values("t").groupby("id"):
             self.true_dict[tid] = list(
                 zip(g.x.to_numpy(), g.y.to_numpy(), g.t.to_numpy())
             )
 
-        # KDTree sobre el punto de inicio de cada segmento
+        # División train/test reproducible: el modelo SOLO indexa TRAIN; el conjunto
+        # TEST queda NO VISTO para medir la efectividad sin sesgo.
+        ids = sorted(self.true_dict.keys())
+        random.Random(self.test_seed).shuffle(ids)
+        n_test = int(len(ids) * self.test_fraction)
+        self.test_ids: set[str] = set(ids[:n_test])
+        self.train_ids: set[str] = set(ids[n_test:])
+
+        # KDTree sobre el punto de inicio de cada segmento — SOLO con TRAIN
         rows: list[tuple[float, float, str, int, str]] = []
-        for tid, pts in self.true_dict.items():
+        for tid in self.train_ids:
+            pts = self.true_dict[tid]
             typ = infer_type(tid)
             for j in range(len(pts) - 1):
                 x, y, _ = pts[j]
@@ -120,6 +135,8 @@ class DestinationPredictor:
         self._meta = [(r[2], r[3], r[4]) for r in rows]  # (id, idx, type)
         self._tree = KDTree(self._A) if len(rows) else None
         self.n_trajectories = len(self.true_dict)
+        self.n_train = len(self.train_ids)
+        self.n_test = len(self.test_ids)
         self.n_segments = len(rows)
 
     # --- API pública ---
@@ -173,10 +190,10 @@ class DestinationPredictor:
 
     # --- demostración con viajes reales (división 75/25) ---
     def list_ids(self, n: int = 24, seed: int = 7) -> list[dict]:
-        """Muestra variada de viajes reales para elegir en el frontend."""
+        """Viajes del conjunto TEST (NO vistos por el modelo) para evaluar sin sesgo."""
         import random
 
-        ids = [t for t, pts in self.true_dict.items() if len(pts) >= 12]
+        ids = [t for t in self.test_ids if len(self.true_dict[t]) >= 12]
         random.Random(seed).shuffle(ids)
         out = []
         for tid in ids:
@@ -187,6 +204,7 @@ class DestinationPredictor:
                 "type": infer_type(tid),
                 "n_points": len(pts),
                 "start": [float(lon), float(lat)],
+                "unseen": True,
             })
             if len(out) >= n:
                 break

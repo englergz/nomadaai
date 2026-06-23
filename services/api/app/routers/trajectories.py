@@ -52,7 +52,9 @@ def demo(
     d["hour"] = hour
     d["alert"] = None
     if state.risk is not None and d.get("candidates"):
-        d["alert"] = state.risk.lookahead_alert(d["candidates"][0]["coordinates"], hour)
+        d["alert"] = state.risk.lookahead_alert(
+            d["candidates"][0]["coordinates"], start_seconds=hour * 3600
+        )
     return d
 
 

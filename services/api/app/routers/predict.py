@@ -60,7 +60,13 @@ def predict_online(
     )
     alert = None
     if state.risk is not None and cands:
-        a = state.risk.lookahead_alert(cands[0].coordinates, req.hour)
+        start_seconds = req.t_seconds if req.t_seconds is not None else req.hour * 3600
+        a = state.risk.lookahead_alert(
+            cands[0].coordinates,
+            start_seconds=start_seconds,
+            threshold_norm=req.threshold,
+            speed_mps=req.speed_mps,
+        )
         if a is not None:
             alert = RiskAlert(**a)
     return OnlineResponse(candidates=_to_candidates(cands), alert=alert)

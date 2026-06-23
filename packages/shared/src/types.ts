@@ -112,6 +112,8 @@ export interface HealthResponse {
   environment: string;
   predictor_ready: boolean;
   n_trajectories: number;
+  n_train?: number;
+  n_test?: number;
   n_segments: number;
   corridors_ready: boolean;
   n_corridors: number;
