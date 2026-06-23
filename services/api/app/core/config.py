@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     corridors_geojson: str = "traclus_segments_wgs84.geojson"
     # Vecinos precomputados (Fréchet).
     neighbors_csv: str = "neighbors_frechet_mot.csv"
+    # Riesgo espacio-temporal (OE2): cell_id,lon,lat,hora,riesgo_dyn
+    # En el contenedor se embebe en artifacts/risk/. En dev cae a Research/analysis_v2/.
+    risk_hourly_csv: str = "risk/tumaco_riesgo_horario.csv"
 
     # --- Límites para tier gratuito (memoria) ---
     # 0 = sin límite. Cap de trayectorias cargadas en el KDTree.

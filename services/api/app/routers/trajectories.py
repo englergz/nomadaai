@@ -5,6 +5,7 @@ from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app import state
 from app.core.config import get_settings
 from app.ml.destination import DestinationPredictor
 from app.state import get_predictor
@@ -25,12 +26,19 @@ def sample(
 def demo(
     tid: str,
     topk: int = Query(3, ge=1, le=10),
+    hour: int = Query(19, ge=0, le=23, description="Hora del día para el riesgo"),
     predictor: DestinationPredictor = Depends(get_predictor),
 ) -> dict:
-    """Prefijo observado (75%) + predicción + recorrido real, para animar en el mapa."""
+    """Prefijo observado (75%) + predicción + recorrido real + alerta anticipada de riesgo."""
     d = predictor.get_demo(tid, topk=topk)
     if d is None:
         raise HTTPException(status_code=404, detail=f"Viaje '{tid}' no encontrado")
+    # Alerta anticipada (OE3): mira la ruta predicha y avisa de la primera zona
+    # de riesgo alto ANTES de alcanzarla, evaluada a la hora indicada.
+    d["hour"] = hour
+    d["alert"] = None
+    if state.risk is not None and d.get("candidates"):
+        d["alert"] = state.risk.lookahead_alert(d["candidates"][0]["coordinates"], hour)
     return d
 
 

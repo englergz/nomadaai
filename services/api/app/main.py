@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from app import state
 from app.core.config import get_settings
 from app.data.corridors import CorridorStore
+from app.data.risk import RiskStore
 from app.ml.destination import DestinationPredictor
 from app.routers import corridors, health, predict, risk, route, trajectories
 
@@ -55,9 +56,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("No existe %s — corredores deshabilitados", geojson)
 
+    # Riesgo espacio-temporal (OE2): artefacto embebido o, en dev, Research/analysis_v2/
+    risk_csv = s.research_path / s.risk_hourly_csv
+    if not risk_csv.exists():
+        risk_csv = s.research_path / "analysis_v2" / "tumaco_riesgo_horario.csv"
+    if risk_csv.exists():
+        state.risk = RiskStore(risk_csv)
+        logger.info("Riesgo listo: %d zonas × 24h", state.risk.n_zones)
+    else:
+        logger.warning("No existe %s — capa de riesgo deshabilitada", risk_csv)
+
     yield
     state.predictor = None
     state.corridors = None
+    state.risk = None
 
 
 def create_app() -> FastAPI:
