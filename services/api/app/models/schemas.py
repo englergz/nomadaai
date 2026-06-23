@@ -61,6 +61,7 @@ class OnlineRequest(BaseModel):
 class RiskAlert(BaseModel):
     lon: float
     lat: float
+    cell_id: str = ""
     risk: float
     risk_norm: float
     distance_m: float

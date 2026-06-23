@@ -7,6 +7,15 @@
   --border: #2d3640;
 }
 
+body.light {
+  --bg: #eef2f6;
+  --panel: #ffffff;
+  --text: #1a2129;
+  --muted: #5b6672;
+  --accent: #2f81f7;
+  --border: #d3dae2;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {
@@ -135,3 +144,23 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
 .push-title { font-size: 12px; font-weight: 700; color: #fecaca; }
 .push-body { font-size: 11px; color: #fde2e2; margin-top: 4px; line-height: 1.4; }
 @keyframes slidein { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* Barra superior (tema / mapa) */
+.topbar { position: absolute; top: 16px; right: 16px; z-index: 12; display: flex; gap: 8px; }
+.topbar button { width: auto; background: var(--panel); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 7px 12px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+
+/* Efectividad */
+.eval-btn { margin-top: 12px; background: #16a34a; }
+.evalcard { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(22,163,74,0.08); }
+.evalbig { font-size: 26px; font-weight: 800; color: var(--text); }
+.evalbig span { font-size: 12px; font-weight: 500; color: var(--muted); }
+.evalrow { font-size: 12px; color: var(--text); margin-top: 4px; }
+
+/* Consola de actividad */
+.console { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; background: rgba(0,0,0,0.25); padding: 8px; }
+.console-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px; }
+.console-l { font-size: 11px; font-family: ui-monospace, monospace; color: #93c5fd; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Notificaciones apiladas */
+.notif-stack { margin-top: auto; width: 100%; display: flex; flex-direction: column; gap: 6px; max-height: 230px; overflow-y: auto; }
+.notif-stack .push { margin-top: 0; }

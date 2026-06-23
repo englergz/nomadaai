@@ -1,6 +1,7 @@
 import type { StyleSpecification } from "maplibre-gl";
 
-// Estilo MapLibre 100% gratis con tiles raster de OpenStreetMap (sin API key).
+// Estilo MapLibre gratis: base plano (OpenStreetMap) + satelital (ESRI World Imagery).
+// Ambas capas raster sin API key; se alterna su visibilidad desde la app.
 export const osmStyle: StyleSpecification = {
   version: 8,
   sources: {
@@ -10,8 +11,19 @@ export const osmStyle: StyleSpecification = {
       tileSize: 256,
       attribution: "© OpenStreetMap contributors",
     },
+    satellite: {
+      type: "raster",
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution: "Imagery © Esri",
+    },
   },
-  layers: [{ id: "osm", type: "raster", source: "osm" }],
+  layers: [
+    { id: "osm", type: "raster", source: "osm" },
+    { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
+  ],
 };
 
 // Centro aproximado del Distrito de Tumaco, Nariño.

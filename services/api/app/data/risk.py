@@ -99,15 +99,15 @@ class RiskStore:
         return {"type": "FeatureCollection", "features": feats, "hour": hour}
 
     # --- consulta puntual (zona más cercana) ---
-    def risk_at(self, lon: float, lat: float, hour: int) -> tuple[float, float]:
-        """Devuelve (riesgo, riesgo_norm) en la zona más cercana al punto."""
+    def risk_at(self, lon: float, lat: float, hour: int) -> tuple[float, float, str]:
+        """Devuelve (riesgo, riesgo_norm, cell_id) en la zona más cercana al punto."""
         rows = self._by_hour.get(int(hour) % 24, [])
-        best_r, best_d = 0.0, float("inf")
-        for (_c, zlon, zlat, r) in rows:
+        best_r, best_d, best_c = 0.0, float("inf"), ""
+        for (c, zlon, zlat, r) in rows:
             d = _haversine_m((lon, lat), (zlon, zlat))
             if d < best_d:
-                best_d, best_r = d, r
-        return best_r, best_r / self.max_risk
+                best_d, best_r, best_c = d, r, c
+        return best_r, best_r / self.max_risk, best_c
 
     # --- alerta anticipada (look-ahead) ---
     def lookahead_alert(
@@ -132,10 +132,11 @@ class RiskStore:
             eta_s = acc / speed_mps if speed_mps else 0.0
             arrival_s = start_seconds + eta_s
             arrival_hour = int(arrival_s // 3600) % 24
-            r, rn = self.risk_at(pt[0], pt[1], arrival_hour)
+            r, rn, cid = self.risk_at(pt[0], pt[1], arrival_hour)
             info = {
                 "lon": pt[0],
                 "lat": pt[1],
+                "cell_id": cid,
                 "risk": round(r, 2),
                 "risk_norm": round(rn, 4),
                 "distance_m": round(acc, 1),

@@ -22,6 +22,62 @@ def sample(
     return {"trips": predictor.list_ids(n=n)}
 
 
+_eval_cache: dict[int, dict] = {}
+
+
+@router.get("/evaluate")
+def evaluate(
+    n: int = Query(160, ge=5, le=2000),
+    predictor: DestinationPredictor = Depends(get_predictor),
+) -> dict:
+    """Efectividad de la predicción de destino sobre el conjunto TEST (no visto).
+
+    Para cada viaje de prueba reproduce la división 75/25, predice excluyendo la propia
+    trayectoria (analogía solo con TRAIN) y mide el error final (FDE) contra el recorrido
+    real a igual horizonte. Reporta acierto a ≤50 m y ≤100 m, global y por tipo.
+    """
+    import statistics
+
+    if n in _eval_cache:
+        return _eval_cache[n]
+
+    test_ids = sorted(predictor.test_ids)[:n]
+    fdes: list[float] = []
+    by_type: dict[str, list[float]] = {}
+    for tid in test_ids:
+        d = predictor.get_demo(tid)
+        if not d or d.get("fde_m") is None:
+            continue
+        fde = float(d["fde_m"])
+        fdes.append(fde)
+        by_type.setdefault(d["type"], []).append(fde)
+
+    def summarize(vals: list[float]) -> dict:
+        if not vals:
+            return {"n": 0}
+        vals_sorted = sorted(vals)
+        p90 = vals_sorted[min(len(vals_sorted) - 1, int(0.9 * len(vals_sorted)))]
+        return {
+            "n": len(vals),
+            "fde_median_m": round(statistics.median(vals), 2),
+            "fde_mean_m": round(statistics.fmean(vals), 2),
+            "fde_p90_m": round(p90, 2),
+            "acc_50m_pct": round(100 * sum(v <= 50 for v in vals) / len(vals), 1),
+            "acc_100m_pct": round(100 * sum(v <= 100 for v in vals) / len(vals), 1),
+        }
+
+    result = {
+        "n_train": predictor.n_train,
+        "n_test": predictor.n_test,
+        "evaluated": len(fdes),
+        "overall": summarize(fdes),
+        "by_type": {t: summarize(v) for t, v in sorted(by_type.items())},
+        "note": "FDE = error final contra el recorrido real al horizonte de continuación; conjunto NO visto.",
+    }
+    _eval_cache[n] = result
+    return result
+
+
 @router.get("/{tid}/track")
 def track(
     tid: str,
