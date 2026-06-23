@@ -1,0 +1,19 @@
+# PostGIS local opcional para desarrollo.
+# El despliegue objetivo es Supabase (nube gratis); esto sirve para trabajar
+# offline o probar el ETL sin tocar la nube.
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: nomadaai-postgis
+    environment:
+      POSTGRES_USER: nomadaai
+      POSTGRES_PASSWORD: nomadaai
+      POSTGRES_DB: nomadaai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  pgdata:

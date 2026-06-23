@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+*.local
+.vite/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env
+.env
+**/.env
+
+# OS
+.DS_Store

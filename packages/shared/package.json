@@ -1,0 +1,11 @@
+{
+  "name": "@nomadaai/shared",
+  "version": "0.1.0",
+  "description": "Tipos y cliente API compartidos (web y futuro móvil).",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
