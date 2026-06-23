@@ -66,10 +66,23 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("No existe %s — capa de riesgo deshabilitada", risk_csv)
 
+    # Grafo de rutas (OE3) — construido al inicio para que /route/build sea inmediato.
+    if state.predictor is not None:
+        try:
+            from app.ml.router import RouteGraph
+            state.route_graph = RouteGraph(state.predictor.true_dict)
+            logger.info(
+                "Grafo de rutas listo: %d nodos, %d aristas",
+                state.route_graph.n_nodes, state.route_graph.n_edges,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("No se pudo construir el grafo de rutas: %s", e)
+
     yield
     state.predictor = None
     state.corridors = None
     state.risk = None
+    state.route_graph = None
 
 
 def create_app() -> FastAPI:

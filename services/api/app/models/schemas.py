@@ -75,6 +75,19 @@ class OnlineResponse(BaseModel):
     alert: Optional[RiskAlert] = None
 
 
+# --- Generación de ruta NUEVA (OE3) ---
+class BuildRouteRequest(BaseModel):
+    origin: Coordinate  # [lon, lat] — dónde estoy
+    dest: Coordinate    # [lon, lat] — a dónde voy
+    type: Optional[str] = None  # vehículo (opcional, para la animación)
+
+
+class BuildRouteResponse(BaseModel):
+    coords: list[Coordinate]
+    distance_m: float
+    n: int
+
+
 # --- Ruteo seguro (OE3 - stub tipado) ---
 class RouteRequest(BaseModel):
     origin: Coordinate  # [lon, lat]

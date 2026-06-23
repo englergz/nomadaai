@@ -10,10 +10,12 @@ from fastapi import HTTPException
 from app.data.corridors import CorridorStore
 from app.data.risk import RiskStore
 from app.ml.destination import DestinationPredictor
+from app.ml.router import RouteGraph
 
 predictor: DestinationPredictor | None = None
 corridors: CorridorStore | None = None
 risk: RiskStore | None = None
+route_graph: RouteGraph | None = None
 
 
 def get_predictor() -> DestinationPredictor:
@@ -32,3 +34,13 @@ def get_risk() -> RiskStore:
     if risk is None:
         raise HTTPException(status_code=503, detail="Capa de riesgo no disponible")
     return risk
+
+
+def get_route_graph() -> RouteGraph:
+    """Construye el grafo de rutas la primera vez que se solicita (perezoso)."""
+    global route_graph
+    if route_graph is None:
+        if predictor is None:
+            raise HTTPException(status_code=503, detail="Predictor no disponible")
+        route_graph = RouteGraph(predictor.true_dict)
+    return route_graph

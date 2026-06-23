@@ -10,9 +10,21 @@ import { api } from "./lib/api";
 import { osmStyle, TUMACO_CENTER, TUMACO_ZOOM } from "./lib/mapStyle";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const TIME_SCALES = [
+  { v: 1, label: "Tiempo real (×1)" },
+  { v: 5, label: "×5" },
+  { v: 15, label: "×15" },
+  { v: 30, label: "×30" },
+  { v: 60, label: "×60" },
+  { v: 120, label: "×120" },
+];
+const DRAW_VEHICLES = [
+  { key: "", label: "Automático" },
+  { key: "mot", label: "🏍️ Moto" },
+  { key: "car", label: "🚗 Carro" },
+  { key: "bus", label: "🚌 Bus" },
+];
 
-// El ícono/animación depende del TIPO REAL del viaje (una moto circula por calles
-// donde no entran carros; eso ya lo respeta la trayectoria real de ese tipo).
 function iconForType(t?: string): string {
   switch ((t ?? "").toLowerCase()) {
     case "mot": return "🏍️";
@@ -29,48 +41,61 @@ function labelForType(t?: string): string {
     case "truck": return "Camión";
     case "taxi": return "Taxi";
     case "car": return "Carro";
-    default: return t ?? "Vehículo";
+    default: return "Vehículo";
   }
 }
+const base = () => import.meta.env.VITE_API_URL ?? "";
 
 export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const vehMarkerRef = useRef<maplibregl.Marker | null>(null);
-  // refs del bucle en vivo
   const coordsRef = useRef<[number, number][]>([]);
-  const idxRef = useRef(0);
+  const cumRef = useRef<number[]>([]);
+  const distRef = useRef(0);
   const timerRef = useRef<number | null>(null);
   const lastPredRef = useRef(0);
   const alertedRef = useRef(false);
   const runningRef = useRef(false);
   const typeRef = useRef("car");
-  const clockRef = useRef(0); // segundos desde medianoche (reloj de la simulación)
-  const speedRef = useRef(8.3); // m/s (~30 km/h)
+  const excludeRef = useRef<string | null>(null);
+  const clockRef = useRef(0);
+  const speedRef = useRef(8.3);
+  const scaleRef = useRef(60);
+  const thrRef = useRef(0.7);
+  const modeRef = useRef<"test" | "draw">("test");
+  const drawRef = useRef<{ origin?: [number, number]; dest?: [number, number] }>({});
 
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [tripId, setTripId] = useState("");
+  const [mode, setMode] = useState<"test" | "draw">("test");
+  const [drawVeh, setDrawVeh] = useState("");
   const [hour, setHour] = useState(20);
+  const [threshold, setThreshold] = useState(70);
+  const [timeScale, setTimeScale] = useState(60);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [predInfo, setPredInfo] = useState<string>("—");
-  const [clock, setClock] = useState<number>(20 * 3600);
+  const [predInfo, setPredInfo] = useState("—");
+  const [clock, setClock] = useState(20 * 3600);
   const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notif, setNotif] = useState<{ title: string; body: string } | null>(null);
   const [finished, setFinished] = useState(false);
+  const [drawMsg, setDrawMsg] = useState("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
 
   const selectedTrip = trips.find((t) => t.id === tripId);
-  const vehIcon = iconForType(selectedTrip?.type);
+  const vehIcon = mode === "draw" ? iconForType(drawVeh || "car") : iconForType(selectedTrip?.type);
+
+  useEffect(() => { thrRef.current = threshold / 100; }, [threshold]);
+  useEffect(() => { scaleRef.current = timeScale; }, [timeScale]);
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   // init map
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
     const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: osmStyle,
-      center: TUMACO_CENTER,
-      zoom: TUMACO_ZOOM,
+      container: containerRef.current, style: osmStyle,
+      center: TUMACO_CENTER, zoom: TUMACO_ZOOM,
     });
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl(), "bottom-right");
@@ -79,155 +104,169 @@ export default function App() {
       try {
         const fc = (await api.corridors(undefined, 8000)) as ApiFC;
         map.addSource("corridors", { type: "geojson", data: fc as never });
-        map.addLayer({
-          id: "corridors",
-          type: "line",
-          source: "corridors",
-          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.22 },
-        });
-      } catch (e) {
-        console.error(e);
-      }
-      // capa de riesgo (heatmap espacio-temporal, cambia con la hora)
+        map.addLayer({ id: "corridors", type: "line", source: "corridors",
+          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.18 } });
+      } catch (e) { console.error(e); }
+
+      // ZONAS DE RIESGO discretas (polígonos), color por nivel
       map.addSource("risk", { type: "geojson", data: emptyFC() as never });
       map.addLayer({
-        id: "risk",
-        type: "heatmap",
-        source: "risk",
+        id: "risk-fill", type: "fill", source: "risk",
         paint: {
-          "heatmap-weight": ["get", "risk_norm"],
-          "heatmap-radius": 38,
-          "heatmap-intensity": 1.1,
-          "heatmap-opacity": 0.6,
-          "heatmap-color": [
-            "interpolate", ["linear"], ["heatmap-density"],
-            0, "rgba(0,0,0,0)",
-            0.3, "#2dd4bf",
-            0.55, "#fde047",
-            0.78, "#fb923c",
-            1, "#ef4444",
+          "fill-color": [
+            "interpolate", ["linear"], ["get", "risk_norm"],
+            0, "#16a34a", 0.4, "#facc15", 0.7, "#f97316", 1, "#ef4444",
+          ],
+          "fill-opacity": [
+            "interpolate", ["linear"], ["get", "risk_norm"], 0, 0.12, 1, 0.6,
           ],
         },
       } as never);
+      map.addLayer({ id: "risk-line", type: "line", source: "risk",
+        paint: { "line-color": "#0b0e12", "line-width": 0.4, "line-opacity": 0.3 } } as never);
+
       addLine(map, "observed", { "line-color": "#2f81f7", "line-width": 5 });
       addLine(map, "pred", { "line-color": "#f97316", "line-width": 4, "line-dasharray": [1.5, 1] });
-      // zona de incidencia DINÁMICA (se reubica/actualiza en cada paso)
-      addPoint(map, "danger", {
-        "circle-radius": 16,
-        "circle-color": "#ef4444",
-        "circle-opacity": 0.28,
-        "circle-stroke-color": "#ef4444",
-        "circle-stroke-width": 2,
-      });
+      addPoint(map, "endpoints", { "circle-radius": 6, "circle-color": "#a855f7", "circle-stroke-color": "#fff", "circle-stroke-width": 2 });
+      addPoint(map, "danger", { "circle-radius": 16, "circle-color": "#ef4444", "circle-opacity": 0.3, "circle-stroke-color": "#ef4444", "circle-stroke-width": 2.5 });
       loadRisk(map, hour);
+
+      // popup de riesgo al hacer clic en una zona
+      map.on("click", "risk-fill", (e) => {
+        const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
+        if (!p) return;
+        new maplibregl.Popup({ closeButton: false })
+          .setLngLat(e.lngLat)
+          .setHTML(`<b>Zona ${p.cell_id}</b><br/>Riesgo: ${p.risk} (${Math.round(Number(p.risk_norm) * 100)}%)<br/>Nivel: ${p.level}`)
+          .addTo(map);
+      });
+      // clic para fijar origen/destino en modo "ruta nueva"
+      map.on("click", (e) => {
+        if (modeRef.current !== "draw" || runningRef.current) return;
+        const pt: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        const d = drawRef.current;
+        if (!d.origin || (d.origin && d.dest)) {
+          drawRef.current = { origin: pt };
+          setDrawMsg("Origen fijado. Ahora marca a dónde vas (destino).");
+        } else {
+          drawRef.current = { ...d, dest: pt };
+          setDrawMsg("Origen y destino listos. Pulsa «Generar ruta y simular».");
+        }
+        const dd = drawRef.current;
+        setPoints(map, "endpoints", [dd.origin, dd.dest].filter(Boolean) as [number, number][]);
+      });
     });
 
-    api.health().then(setHealth).catch(console.error);
+    fetch(`${base()}/health`).then((r) => r.json()).then(setHealth).catch(console.error);
     api.tripsSample(40).then((r) => { setTrips(r.trips); if (r.trips[0]) setTripId(r.trips[0].id); }).catch(console.error);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      map.remove();
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); map.remove(); };
   }, []);
 
   async function loadRisk(map: maplibregl.Map, h: number) {
     try {
-      const base = import.meta.env.VITE_API_URL ?? "";
-      const data = await fetch(`${base}/risk/zones?hour=${h}`).then((r) => r.json());
+      const data = await fetch(`${base()}/risk/zones?hour=${h}`).then((r) => r.json());
       (map.getSource("risk") as maplibregl.GeoJSONSource | undefined)?.setData(data);
-    } catch (e) {
-      console.error("risk:", e);
-    }
+    } catch (e) { console.error("risk:", e); }
   }
 
   function stopSim() {
     runningRef.current = false;
     setRunning(false);
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }
 
-  async function startSim() {
-    const map = mapRef.current;
-    if (!map || !tripId) return;
-    stopSim();
-    setFinished(false);
-    setNotif(null);
-    setLiveRisk(null);
-    setPredInfo("Detectando movimiento…");
-    alertedRef.current = false;
-    lastPredRef.current = 0;
-    idxRef.current = 0;
-    typeRef.current = selectedTrip?.type ?? "car";
-    clockRef.current = hour * 3600;
-    setClock(clockRef.current);
-    setLine(map, "observed", []);
-    setLine(map, "pred", []);
-    setPoint(map, "danger", null);
-
+  async function startTest() {
+    if (!tripId) return;
     let coords: [number, number][] = [];
     try {
-      const t = await fetch(`${import.meta.env.VITE_API_URL ?? ""}/trajectories/${encodeURIComponent(tripId)}/track`).then((r) => r.json());
+      const t = await fetch(`${base()}/trajectories/${encodeURIComponent(tripId)}/track`).then((r) => r.json());
       coords = t.coords;
-    } catch (e) {
-      alert("No pude cargar el recorrido: " + (e as Error).message);
-      return;
-    }
-    if (coords.length < 4) return;
-    coordsRef.current = coords;
-    await loadRisk(map, hour);
-    map.flyTo({ center: coords[0], zoom: 15, duration: 800 });
+    } catch (e) { alert("No pude cargar el recorrido: " + (e as Error).message); return; }
+    excludeRef.current = tripId;
+    typeRef.current = selectedTrip?.type ?? "car";
+    startStream(coords);
+  }
 
-    // marcador del vehículo (ícono según el tipo real del viaje)
+  async function startDraw() {
+    const d = drawRef.current;
+    if (!d.origin || !d.dest) { setDrawMsg("Marca primero origen y destino en el mapa."); return; }
+    setDrawMsg("Generando ruta sobre la red vial…");
+    let coords: [number, number][] = [];
+    try {
+      const r = await fetch(`${base()}/route/build`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ origin: d.origin, dest: d.dest, type: drawVeh || null }),
+      });
+      if (!r.ok) { setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
+      coords = (await r.json()).coords;
+    } catch (e) { setDrawMsg("Error: " + (e as Error).message); return; }
+    excludeRef.current = null; // ruta nueva: nada que excluir
+    typeRef.current = drawVeh || "car";
+    setDrawMsg("Ruta generada. Simulando…");
+    startStream(coords);
+  }
+
+  function startStream(coords: [number, number][]) {
+    const map = mapRef.current;
+    if (!map || coords.length < 4) return;
+    stopSim();
+    setFinished(false); setNotif(null); setLiveRisk(null);
+    setPredInfo("Detectando movimiento…");
+    alertedRef.current = false; lastPredRef.current = 0; distRef.current = 0;
+    clockRef.current = hour * 3600; setClock(clockRef.current);
+
+    // distancias acumuladas + velocidad media (real) del recorrido
+    const cum = [0];
+    for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + haversine(coords[i - 1], coords[i]));
+    coordsRef.current = coords; cumRef.current = cum;
+    const total = cum[cum.length - 1];
+    speedRef.current = excludeRef.current ? Math.max(3, total / Math.max(1, coords.length)) : 8.3;
+
+    setLine(map, "observed", []); setLine(map, "pred", []); setPoint(map, "danger", null);
+    map.flyTo({ center: coords[0], zoom: 15, duration: 700 });
+
     if (!vehMarkerRef.current) {
-      const el = document.createElement("div");
-      el.className = "veh-marker";
+      const el = document.createElement("div"); el.className = "veh-marker";
       vehMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat(coords[0]).addTo(map);
     }
     vehMarkerRef.current.getElement().textContent = iconForType(typeRef.current);
     vehMarkerRef.current.setLngLat(coords[0]);
 
-    runningRef.current = true;
-    setRunning(true);
-    const step = Math.max(1, Math.floor(coords.length / 180)); // ~180 ticks
-    timerRef.current = window.setInterval(() => tick(step), 70);
+    runningRef.current = true; setRunning(true);
+    timerRef.current = window.setInterval(tick, 70);
   }
 
-  async function tick(step: number) {
+  async function tick() {
     const map = mapRef.current;
     if (!map || !runningRef.current) return;
-    const coords = coordsRef.current;
-    const prev = idxRef.current;
-    idxRef.current = Math.min(coords.length, idxRef.current + step);
-    const i = idxRef.current;
-    const acc = coords.slice(0, i);
-    setProgress(Math.round((i / coords.length) * 100));
-    // el reloj avanza con la distancia recorrida (a la velocidad del vehículo)
-    let moved = 0;
-    for (let k = Math.max(1, prev); k < i; k++) moved += haversine(coords[k - 1], coords[k]);
-    clockRef.current += moved / speedRef.current;
-    setClock(clockRef.current);
-    // el sistema "detecta movimiento" y va capturando la trayectoria
-    vehMarkerRef.current?.setLngLat(coords[i - 1]);
+    const coords = coordsRef.current, cum = cumRef.current;
+    const total = cum[cum.length - 1];
+    const simDt = scaleRef.current * 0.07; // segundos simulados por tick
+    distRef.current = Math.min(total, distRef.current + speedRef.current * simDt);
+    clockRef.current += simDt; setClock(clockRef.current);
+    const d = distRef.current;
+    setProgress(Math.round((d / total) * 100));
+
+    // posición interpolada a la distancia recorrida
+    let idx = cum.findIndex((c) => c >= d);
+    if (idx < 0) idx = coords.length - 1;
+    const pos = interpAt(coords, cum, d);
+    const acc = coords.slice(0, Math.max(2, idx + 1));
+    acc[acc.length - 1] = pos;
+    vehMarkerRef.current?.setLngLat(pos);
     setLine(map, "observed", acc);
 
-    // re-predicción ONLINE cada ~450 ms con lo capturado hasta ahora
     const now = performance.now();
     if (acc.length >= 4 && now - lastPredRef.current > 450) {
       lastPredRef.current = now;
       try {
-        const res = await api_online(acc, typeRef.current, clockRef.current, tripId, speedRef.current);
+        const res = await onlineCall(acc);
         const cand = res.candidates?.[0];
         if (cand) setLine(map, "pred", cand.geometry.coordinates as [number, number][]);
         const a = res.alert;
         if (a) {
           setLiveRisk(a.risk_norm);
-          setPredInfo(
-            `Ruta probable: ${cand ? cand.length_m.toFixed(0) : "?"} m · riesgo de la zona ${(a.risk_norm * 100).toFixed(0)}%`
-          );
-          // zona de incidencia DINÁMICA: se reubica en cada paso según la predicción
+          setPredInfo(`Ruta probable: ${cand ? cand.length_m.toFixed(0) : "?"} m · riesgo de la zona ${(a.risk_norm * 100).toFixed(0)}%`);
           if (a.is_high) {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (!alertedRef.current) {
@@ -235,77 +274,97 @@ export default function App() {
               const eta = `${String(a.hour).padStart(2, "0")}:${String(a.arrival_min ?? 0).padStart(2, "0")}`;
               setNotif({
                 title: "⚠️ Alerta de seguridad — NómadaAI",
-                body: `Tu ruta probable entra en una zona de alto riesgo a ~${a.distance_m.toFixed(0)} m; llegarías a las ${eta} (${(a.eta_s ?? 0).toFixed(0)} s). Considera un desvío.`,
+                body: `Tu ruta probable entra en una zona de alto riesgo (${(a.risk_norm * 100).toFixed(0)}%) a ~${a.distance_m.toFixed(0)} m; llegarías a las ${eta}. Considera un desvío.`,
               });
             }
-          } else {
-            setPoint(map, "danger", null);
-          }
+          } else { setPoint(map, "danger", null); }
         }
-      } catch (e) {
-        console.error("online:", e);
-      }
+      } catch (e) { console.error("online:", e); }
     }
+    if (d >= total) { stopSim(); setFinished(true); setProgress(100); }
+  }
 
-    if (i >= coords.length) {
-      stopSim();
-      setFinished(true);
-      setProgress(100);
-    }
+  async function onlineCall(acc: [number, number][]) {
+    const body: Record<string, unknown> = {
+      points: acc.map(([lon, lat], i) => ({ lon, lat, t: i })),
+      type: typeRef.current, t_seconds: clockRef.current,
+      speed_mps: speedRef.current, threshold: thrRef.current, topk: 1,
+    };
+    if (excludeRef.current) body.exclude_id = excludeRef.current;
+    const r = await fetch(`${base()}/predict/online`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error(`online ${r.status}`);
+    return r.json();
   }
 
   return (
     <>
       <div id="map" ref={containerRef} />
-
-      {/* Panel de control */}
       <div className="panel">
         <h1>NómadaAI</h1>
-        <p className="subtitle">Simulación de navegación · Tumaco, Nariño</p>
-        <div className="status">
-          {health
-            ? `${(health.n_test ?? 0).toLocaleString()} viajes NO vistos por el modelo · riesgo dinámico`
-            : "Conectando…"}
+        <p className="subtitle">Simulación de navegación consciente del riesgo · Tumaco</p>
+
+        {health && (
+          <div className="counts">
+            <div><b>{(health.n_trajectories ?? 0).toLocaleString()}</b><span>total</span></div>
+            <div><b>{(health.n_train ?? 0).toLocaleString()}</b><span>entrenamiento</span></div>
+            <div><b>{(health.n_test ?? 0).toLocaleString()}</b><span>no vistas (prueba)</span></div>
+          </div>
+        )}
+
+        <div className="tabs">
+          <button className={mode === "test" ? "on" : ""} onClick={() => setMode("test")} disabled={running}>Viaje no visto</button>
+          <button className={mode === "draw" ? "on" : ""} onClick={() => setMode("draw")} disabled={running}>Ruta nueva (yo elijo)</button>
         </div>
 
-        {running && (
-          <div className="clock">🕒 {fmtClock(clock)}</div>
+        {mode === "test" ? (
+          <>
+            <label className="lbl">Viaje del conjunto de prueba (el modelo no lo conoce)</label>
+            <select className="select" value={tripId} onChange={(e) => setTripId(e.target.value)} disabled={running}>
+              {trips.map((t) => (
+                <option key={t.id} value={t.id}>{iconForType(t.type)} {labelForType(t.type)} · {t.id} ({t.n_points} pts)</option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <>
+            <label className="lbl">Vehículo (opcional)</label>
+            <select className="select" value={drawVeh} onChange={(e) => setDrawVeh(e.target.value)} disabled={running}>
+              {DRAW_VEHICLES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
+            </select>
+            <p className="hint" style={{ marginTop: 6 }}>{drawMsg}</p>
+          </>
         )}
 
-        <h2>Recorrido simulado</h2>
-        <label className="lbl">Viaje no visto (se reproduce como tu GPS en vivo)</label>
-        <select className="select" value={tripId} onChange={(e) => setTripId(e.target.value)} disabled={running}>
-          {trips.map((t) => (
-            <option key={t.id} value={t.id}>{iconForType(t.type)} {labelForType(t.type)} · {t.id} ({t.n_points} pts)</option>
-          ))}
-        </select>
-        {selectedTrip && (
-          <p className="hint" style={{ marginTop: 6 }}>
-            <b>{vehIcon} {labelForType(selectedTrip.type)}</b> · <span className="tag-unseen">no visto</span> — el modelo nunca indexó este viaje (prueba sin sesgo).
-          </p>
-        )}
-
-        <label className="lbl">Hora del día (riesgo dinámico)</label>
+        <label className="lbl">Hora de salida (riesgo dinámico)</label>
         <select className="select" value={hour} onChange={(e) => { const h = Number(e.target.value); setHour(h); if (mapRef.current) loadRisk(mapRef.current, h); }} disabled={running}>
-          {HOURS.map((h) => (
-            <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
-          ))}
+          {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
         </select>
+
+        <label className="lbl">Velocidad del reloj</label>
+        <select className="select" value={timeScale} onChange={(e) => setTimeScale(Number(e.target.value))}>
+          {TIME_SCALES.map((s) => <option key={s.v} value={s.v}>{s.label}</option>)}
+        </select>
+
+        <label className="lbl">Umbral de alerta: <b>{threshold}%</b></label>
+        <input className="range" type="range" min={0} max={100} step={5} value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} />
 
         {!running ? (
-          <button onClick={startSim} disabled={!tripId}>▶ Iniciar simulación</button>
+          mode === "test"
+            ? <button onClick={startTest} disabled={!tripId}>▶ Iniciar simulación</button>
+            : <button onClick={startDraw}>▶ Generar ruta y simular</button>
         ) : (
           <button className="secondary" onClick={stopSim}>■ Detener</button>
         )}
 
+        {(running || finished) && <div className="clock">🕒 {fmtClock(clock)} · {timeScale === 1 ? "tiempo real" : `×${timeScale}`}</div>}
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
         <p className="hint">{predInfo}</p>
         {finished && <p className="badge">✓ Recorrido finalizado</p>}
 
         <p className="legend">
-          <span className="dot blue" /> capturado &nbsp;
-          <span className="dot orange" /> predicho &nbsp;
-          <span className="dot red" /> zona de riesgo
+          <span className="dot blue" /> capturado &nbsp; <span className="dot orange" /> predicho &nbsp; <span className="dot red" /> zona alerta
         </p>
       </div>
 
@@ -315,13 +374,9 @@ export default function App() {
         <div className="phone-screen">
           <div className="phone-status">{running || finished ? fmtClock(clock) : `${String(hour).padStart(2, "0")}:00`} · NómadaAI</div>
           <div className="phone-veh">{vehIcon}</div>
-          <div className="phone-sub">
-            {running ? "Navegando…" : finished ? "Recorrido finalizado" : "En espera"}
-          </div>
+          <div className="phone-sub">{running ? "Navegando…" : finished ? "Finalizado" : "En espera"}</div>
           {liveRisk != null && (
-            <div className={`risk-pill ${liveRisk >= 0.5 ? "hi" : ""}`}>
-              Riesgo de la zona: {(liveRisk * 100).toFixed(0)}%
-            </div>
+            <div className={`risk-pill ${liveRisk >= thrRef.current ? "hi" : ""}`}>Riesgo de la zona: {(liveRisk * 100).toFixed(0)}%</div>
           )}
           {notif && (
             <div className="push">
@@ -335,48 +390,26 @@ export default function App() {
   );
 }
 
-// Llamada directa al endpoint de predicción online (streaming)
-async function api_online(
-  acc: [number, number][],
-  type: string,
-  tSeconds: number,
-  tripId: string,
-  speedMps: number
-) {
-  const base = import.meta.env.VITE_API_URL ?? "";
-  const res = await fetch(`${base}/predict/online`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      points: acc.map(([lon, lat], i) => ({ lon, lat, t: i })),
-      type,
-      t_seconds: tSeconds,
-      speed_mps: speedMps,
-      threshold: 0.7,
-      exclude_id: tripId,
-      topk: 1,
-    }),
-  });
-  if (!res.ok) throw new Error(`online ${res.status}`);
-  return res.json();
-}
-
+// ---------- geometría ----------
 function haversine(a: [number, number], b: [number, number]): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b[1] - a[1]);
-  const dLon = toRad(b[0] - a[0]);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
+  const R = 6371000, toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]), dLon = toRad(b[0] - a[0]);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
-
+function interpAt(coords: [number, number][], cum: number[], d: number): [number, number] {
+  if (d <= 0) return coords[0];
+  const total = cum[cum.length - 1];
+  if (d >= total) return coords[coords.length - 1];
+  let i = cum.findIndex((c) => c >= d);
+  if (i <= 0) i = 1;
+  const seg = cum[i] - cum[i - 1] || 1;
+  const f = (d - cum[i - 1]) / seg;
+  return [coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * f, coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * f];
+}
 function fmtClock(sec: number): string {
   const s = ((sec % 86400) + 86400) % 86400;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const ss = Math.floor(s % 60);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = Math.floor(s % 60);
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
@@ -389,22 +422,20 @@ function addPoint(map: maplibregl.Map, id: string, paint: Record<string, unknown
   map.addSource(id, { type: "geojson", data: emptyFC() as never });
   map.addLayer({ id, type: "circle", source: id, paint } as never);
 }
-function emptyFC() {
-  return { type: "FeatureCollection", features: [] };
-}
+function emptyFC() { return { type: "FeatureCollection", features: [] }; }
 function setLine(map: maplibregl.Map, id: string, coords: [number, number][]) {
   const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-  src?.setData(
-    coords.length >= 2
-      ? ({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} } as never)
-      : (emptyFC() as never)
-  );
+  src?.setData(coords.length >= 2
+    ? ({ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} } as never)
+    : (emptyFC() as never));
 }
 function setPoint(map: maplibregl.Map, id: string, coord: [number, number] | null) {
   const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
-  src?.setData(
-    coord
-      ? ({ type: "Feature", geometry: { type: "Point", coordinates: coord }, properties: {} } as never)
-      : (emptyFC() as never)
-  );
+  src?.setData(coord
+    ? ({ type: "Feature", geometry: { type: "Point", coordinates: coord }, properties: {} } as never)
+    : (emptyFC() as never));
+}
+function setPoints(map: maplibregl.Map, id: string, coords: [number, number][]) {
+  const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
+  src?.setData({ type: "FeatureCollection", features: coords.map((c) => ({ type: "Feature", geometry: { type: "Point", coordinates: c }, properties: {} })) } as never);
 }

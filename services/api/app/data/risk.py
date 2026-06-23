@@ -19,6 +19,24 @@ import math
 from pathlib import Path
 
 
+def _min_step(vals: list[float]) -> float:
+    """Mínima separación positiva entre valores ordenados (paso de la malla)."""
+    step = None
+    for i in range(1, len(vals)):
+        d = vals[i] - vals[i - 1]
+        if d > 1e-9 and (step is None or d < step):
+            step = d
+    return step or 0.002  # ~200 m de respaldo
+
+
+def _level(risk_norm: float) -> str:
+    if risk_norm >= 0.7:
+        return "alto"
+    if risk_norm >= 0.4:
+        return "medio"
+    return "bajo"
+
+
 def _haversine_m(a: tuple[float, float], b: tuple[float, float]) -> float:
     R = 6371000.0
     p1, p2 = math.radians(a[1]), math.radians(b[1])
@@ -44,18 +62,38 @@ class RiskStore:
         self.max_risk = max_risk or 1.0
         self.n_zones = len({c for rows in self._by_hour.values() for (c, *_3) in rows})
 
-    # --- mapa ---
+        # Tamaño de celda de la malla (para dibujar zonas discretas como polígonos):
+        # mínima separación positiva entre centroides en lon y lat.
+        sample = self._by_hour.get(0) or next(iter(self._by_hour.values()), [])
+        lons = sorted({round(lon, 6) for (_c, lon, _la, _r) in sample})
+        lats = sorted({round(lat, 6) for (_c, _lo, lat, _r) in sample})
+        self.dlon = _min_step(lons)
+        self.dlat = _min_step(lats)
+
+    # --- mapa: zonas discretas (polígonos cuadrados) con riesgo por hora ---
     def zones_geojson(self, hour: int) -> dict:
         hour = int(hour) % 24
+        hx, hy = self.dlon / 2, self.dlat / 2
         feats = []
         for (cid, lon, lat, r) in self._by_hour.get(hour, []):
+            rn = r / self.max_risk
             feats.append({
                 "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [lon - hx, lat - hy], [lon + hx, lat - hy],
+                        [lon + hx, lat + hy], [lon - hx, lat + hy],
+                        [lon - hx, lat - hy],
+                    ]],
+                },
                 "properties": {
                     "cell_id": cid,
+                    "lon": lon,
+                    "lat": lat,
                     "risk": round(r, 2),
-                    "risk_norm": round(r / self.max_risk, 4),
+                    "risk_norm": round(rn, 4),
+                    "level": _level(rn),
                 },
             })
         return {"type": "FeatureCollection", "features": feats, "hour": hour}
