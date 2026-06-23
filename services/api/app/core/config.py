@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- Identidad ---
-    app_name: str = "NomadaAI API"
+    app_name: str = "NómadaAI API"
     environment: str = "development"
 
     # --- Artefactos de Research (OE1) ---

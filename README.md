@@ -1,5 +1,5 @@
 ---
-title: NomadaAI
+title: NómadaAI
 emoji: 🗺️
 colorFrom: blue
 colorTo: indigo

@@ -131,8 +131,9 @@ export default function App() {
       map.on("click", "risk-fill", (e) => {
         const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
         if (!p) return;
-        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
-          .setHTML(`<b>Zona ${p.cell_id}</b><br/>Riesgo: ${p.risk} (${Math.round(Number(p.risk_norm) * 100)}%)<br/>Nivel: ${p.level}`).addTo(map);
+        const ll = `${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`;
+        new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat)
+          .setHTML(`<b>Zona ${p.cell_id}</b><br/>Riesgo: ${p.risk} (${Math.round(Number(p.risk_norm) * 100)}%)<br/>Nivel: ${p.level}<br/>Centroide: ${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}<br/>Clic: ${ll}`).addTo(map);
       });
       map.on("click", (e) => {
         if (modeRef.current !== "draw" || runningRef.current) return;
@@ -399,9 +400,11 @@ export default function App() {
           </div>
         )}
 
-        <p className="legend">
-          <span className="dot blue" /> capturado &nbsp; <span className="dot orange" /> predicho &nbsp; <span className="dot red" /> zona alerta
-        </p>
+        <div className="legend">
+          <span className="leg"><span className="dot blue" /> capturado</span>
+          <span className="leg"><span className="dot orange" /> predicho</span>
+          <span className="leg"><span className="dot red" /> zona alerta</span>
+        </div>
       </div>
 
       {/* Simulador de móvil con notificaciones apiladas */}
