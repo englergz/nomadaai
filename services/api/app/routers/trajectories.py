@@ -22,6 +22,20 @@ def sample(
     return {"trips": predictor.list_ids(n=n)}
 
 
+@router.get("/{tid}/track")
+def track(
+    tid: str,
+    predictor: DestinationPredictor = Depends(get_predictor),
+) -> dict:
+    """Recorrido completo (lon/lat) de un viaje real, para reproducir como GPS en vivo."""
+    from app.ml.destination import infer_type
+
+    coords = predictor.get_track(tid)
+    if coords is None:
+        raise HTTPException(status_code=404, detail=f"Viaje '{tid}' no encontrado")
+    return {"id": tid, "type": infer_type(tid), "coords": coords, "n": len(coords)}
+
+
 @router.get("/{tid}/demo")
 def demo(
     tid: str,

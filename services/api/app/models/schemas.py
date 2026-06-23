@@ -44,6 +44,31 @@ class PredictResponse(BaseModel):
     candidates: list[PredictionCandidate]
 
 
+# --- Predicción online (streaming) + alerta anticipada (OE3) ---
+class OnlineRequest(BaseModel):
+    points: list[TrajectoryPoint] = Field(..., min_length=2)
+    type: Optional[str] = None
+    hour: int = Field(default=19, ge=0, le=23)
+    exclude_id: Optional[str] = None
+    topk: int = Field(default=1, ge=1, le=5)
+
+
+class RiskAlert(BaseModel):
+    lon: float
+    lat: float
+    risk: float
+    risk_norm: float
+    distance_m: float
+    eta_s: Optional[float] = None
+    hour: int
+    is_high: bool
+
+
+class OnlineResponse(BaseModel):
+    candidates: list[PredictionCandidate]
+    alert: Optional[RiskAlert] = None
+
+
 # --- Ruteo seguro (OE3 - stub tipado) ---
 class RouteRequest(BaseModel):
     origin: Coordinate  # [lon, lat]

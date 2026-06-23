@@ -192,6 +192,17 @@ class DestinationPredictor:
                 break
         return out
 
+    def get_track(self, tid: str) -> list[list[float]] | None:
+        """Recorrido completo de un viaje real en lon/lat, para reproducir como GPS en vivo."""
+        pts = self.true_dict.get(tid)
+        if not pts:
+            return None
+        out: list[list[float]] = []
+        for (x, y, _t) in pts:
+            lon, lat = to_wgs84(x, y)
+            out.append([float(lon), float(lat)])
+        return out
+
     def get_demo(self, tid: str, topk: int = 3, frac: float = 0.75) -> dict | None:
         """Para un viaje real: prefijo observado (75%), predicción y recorrido real."""
         pts = self.true_dict.get(tid)

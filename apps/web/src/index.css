@@ -78,6 +78,7 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
 .dot.blue { background: #2f81f7; }
 .dot.orange { background: #f97316; }
 .dot.green { background: #22c55e; }
+.dot.red { background: #ef4444; }
 .metric {
   margin-top: 8px;
   font-size: 13px;
@@ -86,3 +87,39 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
   border-radius: 6px;
   padding: 8px;
 }
+
+.lbl { display: block; font-size: 11px; color: var(--muted); margin: 12px 0 4px; }
+.veh-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.veh-btn {
+  display: flex; align-items: center; gap: 6px; justify-content: flex-start;
+  width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 7px 8px; font-size: 12px;
+}
+.veh-btn.on { border-color: var(--accent); background: rgba(47,129,247,0.15); }
+.veh-btn span { font-size: 16px; }
+
+.progress { height: 6px; background: var(--border); border-radius: 4px; margin-top: 12px; overflow: hidden; }
+.progress .bar { height: 100%; background: var(--accent); transition: width 0.2s; }
+.legend { font-size: 11px; color: var(--muted); margin-top: 10px; display: flex; align-items: center; }
+
+/* Marcador del vehículo en el mapa */
+.veh-marker { font-size: 24px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); cursor: default; }
+
+/* Simulador de móvil */
+.phone {
+  position: absolute; bottom: 20px; right: 20px; z-index: 12;
+  width: 230px; height: 420px; background: #0b0e12; border: 6px solid #20262e;
+  border-radius: 32px; box-shadow: 0 16px 48px rgba(0,0,0,0.55); overflow: hidden;
+}
+.phone-notch { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); width: 70px; height: 16px; background: #20262e; border-radius: 0 0 12px 12px; z-index: 2; }
+.phone-screen { position: absolute; inset: 8px; border-radius: 24px; background: linear-gradient(160deg, #1b2230, #0e1320); padding: 28px 14px 14px; display: flex; flex-direction: column; align-items: center; }
+.phone-status { font-size: 11px; color: var(--muted); }
+.phone-veh { font-size: 54px; margin-top: 30px; }
+.phone-sub { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.push {
+  margin-top: auto; width: 100%; background: rgba(239,68,68,0.16); border: 1px solid #ef4444;
+  border-radius: 12px; padding: 10px; animation: slidein 0.35s ease;
+}
+.push-title { font-size: 12px; font-weight: 700; color: #fecaca; }
+.push-body { font-size: 11px; color: #fde2e2; margin-top: 4px; line-height: 1.4; }
+@keyframes slidein { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
