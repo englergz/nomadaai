@@ -11,11 +11,31 @@ license: mit
 
 # NómadaAI
 
-Aplicación inteligente para la **gestión segura de rutas urbanas** mediante análisis de
-datos en el Distrito de Tumaco, Nariño. Tesis MGTIC · Universidad de Nariño.
+**Aplicación inteligente para la gestión segura de rutas urbanas mediante análisis de datos en
+tiempo real en el Distrito de Tumaco, Nariño.** Trabajo de Grado, Maestría en Gestión de
+Tecnologías de la Información y del Conocimiento (MGTIC), Facultad de Ingeniería, Universidad de
+Nariño. Autor: Engler González Prado. Director: PhD. Andrés Oswaldo Calderón Romero.
 
-Este árbol `app/` es la **aplicación** (backend + frontend) construida sobre la
-investigación de `../Research/`. Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Este árbol `app/` es la **aplicación** (backend + frontend) construida sobre la investigación de
+`../Research/`. Demo en vivo: **https://englergz-nomadaai.hf.space**
+
+## Objetivos específicos (anteproyecto aprobado)
+
+- **OE1** — Caracterizar el desplazamiento y **predecir el destino** (modelo de IA).
+- **OE2** — **Modelo de riesgo delictivo por zonas** (espacio-temporal, multivariable).
+- **OE3** — **Recomendación de rutas seguras** y **alerta anticipada** (integra OE1+OE2).
+- **OE4** — **Evaluar la efectividad** mediante simulaciones (train/test, ajuste de parámetros).
+
+## Documentación
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Método, modelos y técnicas por OE (IEEE), coherente con el anteproyecto; inyección por terminal |
+| [docs/MODELO_RIESGO.md](docs/MODELO_RIESGO.md) | Fundamentación y **variables** del riesgo (OE2), socioeconómicas + criminología ambiental (IEEE) |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura, stack, contrato de API, modelo de datos |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | Despliegue (Hugging Face Space + Supabase) |
+
+> **Citación: IEEE** en toda la documentación; la numeración `[n]` coincide con el anteproyecto.
 
 ## Estructura
 
@@ -23,9 +43,9 @@ investigación de `../Research/`. Ver [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 app/
   packages/shared/   tipos + cliente API (web y futuro móvil)
   apps/web/          React + Vite + MapLibre GL
-  services/api/      FastAPI — expone OE1, stubs OE2/OE3
+  services/api/      FastAPI — OE1 (predicción), OE2 (riesgo), OE3 (ruteo/alerta), OE4 (/evaluate)
   db/                migraciones PostGIS + ETL
-  docs/              arquitectura
+  docs/              metodología, modelo de riesgo, arquitectura, despliegue
 ```
 
 ## Arranque rápido (dev)
@@ -47,6 +67,7 @@ npm run dev:web                        # http://localhost:5173
 ```
 
 ## Estado
-- ✅ **OE1** predicción de destino + corredores — operativo y verificado.
-- ⏳ **OE2** riesgo por zonas — tablas y endpoints listos, faltan datos.
-- 🟡 **OE3** rutas seguras — ruteo stub (línea recta) listo para networkx + riesgo.
+- ✅ **OE1** predicción de destino — operativo; **acierto ≈90% a ≤50 m** sobre conjunto no visto.
+- ✅ **OE2** riesgo espacio-temporal por zonas — operativo (`/risk/zones?hour=`); enriquecimiento socioeconómico documentado.
+- ✅ **OE3** alerta anticipada + ruteo (networkx) — operativo (`/predict/online`, `/route/build`).
+- ✅ **OE4** evaluación sin sesgo (train/test) — `/trajectories/evaluate`.

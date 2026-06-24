@@ -5,17 +5,18 @@
 > Tesis MGTIC · Universidad de Nariño · Engler González Prado.
 
 Este documento describe los cimientos técnicos de la aplicación que materializa la
-investigación de `Research/`. Define el stack, la arquitectura, el contrato de API, el
-modelo de datos y el roadmap de los objetivos pendientes (OE2/OE3), declarando con
-honestidad lo que ya funciona y lo que falta.
+investigación de `Research/`. Define el stack, la arquitectura, el contrato de API y el
+modelo de datos. La fundamentación de métodos y del riesgo está en
+[METODOLOGIA.md](METODOLOGIA.md) y [MODELO_RIESGO.md](MODELO_RIESGO.md) (citación IEEE).
 
-## 1. Objetivos y estado
+## 1. Objetivos y estado (4 objetivos específicos)
 
 | Obj. | Descripción | Estado | Dónde vive |
 |------|-------------|--------|-----------|
-| OE1 | Caracterizar la movilidad y **predecir el destino** | ✅ Operativo y medido | `Research/` (datos+modelo) · `services/api` (lo expone) |
-| OE2 | Modelo de **riesgo delictivo por zonas** | ⏳ Por iniciar (~0%) | stubs en `services/api` · `db/` (tablas listas) |
-| OE3 | **Rutas seguras** + API + app con alertas | 🟡 Cimientos puestos | `services/api` (ruteo stub) · `apps/web` |
+| OE1 | Caracterizar la movilidad y **predecir el destino** | ✅ Operativo y medido | `Research/` (datos+modelo) · `services/api` |
+| OE2 | Modelo de **riesgo delictivo por zonas** (espacio-temporal) | ✅ Operativo | `services/api` (`/risk/zones`) · `Research/analysis_v2` |
+| OE3 | **Rutas seguras** + **alerta anticipada** | ✅ Operativo | `services/api` (`/predict/online`, `/route/build`) · `apps/web` |
+| OE4 | **Evaluar la efectividad** (train/test, escenarios) | ✅ Operativo | `services/api` (`/trajectories/evaluate`) |
 
 ## 2. Decisiones de arquitectura (ADR resumido)
 
