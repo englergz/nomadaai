@@ -42,6 +42,8 @@ export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const vehMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const vehArrowRef = useRef<HTMLDivElement | null>(null);
+  const lastPosRef = useRef<[number, number] | null>(null);
   const coordsRef = useRef<[number, number][]>([]);
   const cumRef = useRef<number[]>([]);
   const distRef = useRef(0);
@@ -56,6 +58,7 @@ export default function App() {
   const scaleRef = useRef(60);
   const thrRef = useRef(0.7);
   const modeRef = useRef<"test" | "draw">("test");
+  const followRef = useRef(true);
   const drawRef = useRef<{ origin?: [number, number]; dest?: [number, number] }>({});
   const notifIdRef = useRef(0);
 
@@ -78,6 +81,8 @@ export default function App() {
   const [drawMsg, setDrawMsg] = useState("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [sat, setSat] = useState(false);
+  const [riskOn, setRiskOn] = useState(true);
+  const [follow, setFollow] = useState(true);
   const [evalRes, setEvalRes] = useState<any>(null);
   const [evalLoading, setEvalLoading] = useState(false);
 
@@ -89,9 +94,19 @@ export default function App() {
   useEffect(() => { scaleRef.current = timeScale; }, [timeScale]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { document.body.className = theme === "light" ? "light" : ""; }, [theme]);
+  useEffect(() => { followRef.current = follow; }, [follow]);
 
   function pushLog(line: string) {
-    setLog((prev) => [`${fmtClock(clockRef.current)} · ${line}`, ...prev].slice(0, 8));
+    setLog((prev) => [`${fmtClock(clockRef.current)} · ${line}`, ...prev].slice(0, 200));
+  }
+  function toggleRisk(next: boolean) {
+    setRiskOn(next);
+    const map = mapRef.current; if (!map || !map.getLayer("risk-fill")) return;
+    const v = next ? "visible" : "none";
+    try {
+      map.setLayoutProperty("risk-fill", "visibility", v);
+      map.setLayoutProperty("risk-line", "visibility", v);
+    } catch (e) { console.error(e); }
   }
 
   // init map
@@ -157,8 +172,10 @@ export default function App() {
   function toggleSat(next: boolean) {
     setSat(next);
     const map = mapRef.current; if (!map) return;
-    map.setLayoutProperty("satellite", "visibility", next ? "visible" : "none");
-    map.setLayoutProperty("osm", "visibility", next ? "none" : "visible");
+    try {
+      map.setLayoutProperty("satellite", "visibility", next ? "visible" : "none");
+      map.setLayoutProperty("osm", "visibility", next ? "none" : "visible");
+    } catch (e) { console.error(e); }
   }
 
   async function loadRisk(map: maplibregl.Map, h: number) {
@@ -226,14 +243,15 @@ export default function App() {
     speedRef.current = speedOf(typeRef.current); // el tiempo depende del tipo de vehículo
 
     setLine(map, "observed", []); setLine(map, "pred", []); setPoint(map, "danger", null);
+    lastPosRef.current = null;
     map.flyTo({ center: coords[0], zoom: 15, duration: 700 });
 
-    if (!vehMarkerRef.current) {
-      const el = document.createElement("div"); el.className = "veh-marker";
-      vehMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat(coords[0]).addTo(map);
-    }
-    vehMarkerRef.current.getElement().textContent = iconForType(typeRef.current);
-    vehMarkerRef.current.setLngLat(coords[0]);
+    // marcador "puck": flecha que apunta a la dirección + ícono del vehículo (recto)
+    if (vehMarkerRef.current) { vehMarkerRef.current.remove(); vehMarkerRef.current = null; }
+    const el = document.createElement("div"); el.className = "veh-puck";
+    el.innerHTML = `<div class="veh-arrow"></div><div class="veh-emoji">${iconForType(typeRef.current)}</div>`;
+    vehArrowRef.current = el.querySelector(".veh-arrow");
+    vehMarkerRef.current = new maplibregl.Marker({ element: el }).setLngLat(coords[0]).addTo(map);
 
     runningRef.current = true; setRunning(true);
     pushLog(`🟢 Movimiento detectado (${labelForType(typeRef.current)}, ${(speedRef.current * 3.6).toFixed(0)} km/h)`);
@@ -257,23 +275,33 @@ export default function App() {
     const acc = coords.slice(0, Math.max(2, idx + 1));
     acc[acc.length - 1] = pos;
     vehMarkerRef.current?.setLngLat(pos);
+    // orientar el vehículo hacia su dirección de avance (coherente con la calle)
+    const prevPos = lastPosRef.current;
+    if (prevPos && (prevPos[0] !== pos[0] || prevPos[1] !== pos[1])) {
+      const brg = bearing(prevPos, pos);
+      if (vehArrowRef.current) vehArrowRef.current.style.transform = `rotate(${brg}deg)`;
+    }
+    lastPosRef.current = pos;
     setLine(map, "observed", acc);
+    // la cámara sigue al vehículo
+    if (followRef.current) map.setCenter(pos);
 
     const now = performance.now();
     if (acc.length >= 4 && now - lastPredRef.current > 450) {
       lastPredRef.current = now;
-      pushLog(`📡 ${acc.length} ubicaciones → modelo de predicción`);
+      pushLog(`→ POST /predict/online · pts=${acc.length} · pos=${pos[1].toFixed(5)},${pos[0].toFixed(5)} · t=${fmtClock(clockRef.current)}`);
       try {
         const res = await onlineCall(acc);
         const cand = res.candidates?.[0];
         if (cand) {
           setLine(map, "pred", cand.geometry.coordinates as [number, number][]);
-          pushLog(`🧭 Ruta probable ~${cand.length_m.toFixed(0)} m (vecino ${cand.neighbor_id})`);
+          pushLog(`← pred: vecino ${cand.neighbor_id} · ${cand.length_m.toFixed(0)} m · conf ${(cand.confidence * 100).toFixed(0)}%`);
         }
         const a = res.alert;
         if (a) {
           setLiveRisk(a.risk_norm);
           setPredInfo(`Ruta probable: ${cand ? cand.length_m.toFixed(0) : "?"} m · riesgo de la zona ${(a.risk_norm * 100).toFixed(0)}%`);
+          pushLog(`← riesgo: zona ${a.cell_id} · ${(a.risk_norm * 100).toFixed(0)}% · d=${a.distance_m.toFixed(0)} m · llegada ${String(a.hour).padStart(2, "0")}:${String(a.arrival_min ?? 0).padStart(2, "0")} · ${a.is_high ? "ALTO" : "ok"}`);
           if (a.is_high) {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (a.cell_id && a.cell_id !== lastCellRef.current) {
@@ -284,8 +312,7 @@ export default function App() {
                 id,
                 title: "⚠️ Alerta de seguridad",
                 body: `Zona ${a.cell_id} de alto riesgo (${(a.risk_norm * 100).toFixed(0)}%) a ~${a.distance_m.toFixed(0)} m · llegarías ${eta}. Considera desvío.`,
-              }, ...prev].slice(0, 6));
-              pushLog(`⚠️ ALERTA zona ${a.cell_id} (${(a.risk_norm * 100).toFixed(0)}%) a ${a.distance_m.toFixed(0)} m`);
+              }, ...prev].slice(0, 20));
             }
           } else { setPoint(map, "danger", null); }
         }
@@ -316,6 +343,8 @@ export default function App() {
       <div className="topbar">
         <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀️ Claro" : "🌙 Oscuro"}</button>
         <button onClick={() => toggleSat(!sat)}>{sat ? "🗺️ Plano" : "🛰️ Satelital"}</button>
+        <button className={riskOn ? "on" : ""} onClick={() => toggleRisk(!riskOn)}>{riskOn ? "🟥 Riesgo: ON" : "⬜ Riesgo: OFF"}</button>
+        <button className={follow ? "on" : ""} onClick={() => setFollow(!follow)}>{follow ? "🎯 Seguir: ON" : "🧭 Seguir: OFF"}</button>
       </div>
 
       <div className="panel">
@@ -393,19 +422,22 @@ export default function App() {
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
         <p className="hint">{predInfo}</p>
 
-        {log.length > 0 && (
-          <div className="console">
-            <div className="console-h">Actividad del sistema</div>
-            {log.map((l, i) => <div key={i} className="console-l">{l}</div>)}
-          </div>
-        )}
-
         <div className="legend">
           <span className="leg"><span className="dot blue" /> capturado</span>
           <span className="leg"><span className="dot orange" /> predicho</span>
           <span className="leg"><span className="dot red" /> zona alerta</span>
         </div>
       </div>
+
+      {/* Telemetría flotante (las "entrañas" en tiempo real) */}
+      {log.length > 0 && (
+        <div className="telemetry">
+          <div className="telemetry-h">● ACTIVIDAD DEL SISTEMA · entradas/salidas del modelo</div>
+          <div className="telemetry-body">
+            {log.map((l, i) => <div key={i} className="telemetry-l">{l}</div>)}
+          </div>
+        </div>
+      )}
 
       {/* Simulador de móvil con notificaciones apiladas */}
       <div className="phone">
@@ -447,6 +479,13 @@ function interpAt(coords: [number, number][], cum: number[], d: number): [number
   const seg = cum[i] - cum[i - 1] || 1;
   const f = (d - cum[i - 1]) / seg;
   return [coords[i - 1][0] + (coords[i][0] - coords[i - 1][0]) * f, coords[i - 1][1] + (coords[i][1] - coords[i - 1][1]) * f];
+}
+function bearing(a: [number, number], b: [number, number]): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(b[0] - a[0])) * Math.cos(toRad(b[1]));
+  const x = Math.cos(toRad(a[1])) * Math.sin(toRad(b[1])) -
+    Math.sin(toRad(a[1])) * Math.cos(toRad(b[1])) * Math.cos(toRad(b[0] - a[0]));
+  return (Math.atan2(y, x) * 180) / Math.PI; // 0 = norte, horario
 }
 function fmtClock(sec: number): string {
   const s = ((sec % 86400) + 86400) % 86400;

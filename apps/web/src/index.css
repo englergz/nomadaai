@@ -166,12 +166,24 @@ button.secondary { background: transparent; border: 1px solid var(--border); col
 .notif-stack { margin-top: 12px; width: 100%; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; }
 .notif-stack .push { margin-top: 0; }
 
-/* Tema claro: teléfono y consola */
-body.light .phone { background: #c9d2dc; border-color: #aab6c2; }
-body.light .phone-notch { background: #aab6c2; }
-body.light .phone-screen { background: linear-gradient(160deg, #f6f9fc, #e7edf3); }
-body.light .phone-status, body.light .phone-sub { color: #5b6672; }
-body.light .console { background: #f1f5f9; }
-body.light .console-l { color: #1d4ed8; }
+/* Tema claro: el teléfono es un DISPOSITIVO → siempre oscuro (no cambia). */
 body.light .clock { background: #e2e8f0; color: #92400e; }
 body.light .topbar button { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+
+/* Marcador "puck" con dirección */
+.veh-puck { position: relative; width: 38px; height: 38px; }
+.veh-puck::before { content: ""; position: absolute; inset: 5px; background: rgba(255,255,255,0.94); border-radius: 50%; box-shadow: 0 2px 7px rgba(0,0,0,0.45); }
+.veh-arrow { position: absolute; inset: 0; transition: transform 0.12s linear; }
+.veh-arrow::before { content: ""; position: absolute; left: 50%; top: -3px; transform: translateX(-50%); border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 14px solid #2f81f7; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.4)); }
+.veh-emoji { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 19px; }
+
+/* Topbar toggles activos */
+.topbar button.on { border-color: var(--accent); color: var(--accent); }
+
+/* Telemetría flotante (sin fondo, estilo overlay de juego) */
+.telemetry { position: absolute; left: 360px; right: 274px; bottom: 12px; z-index: 11; max-height: 36vh; pointer-events: none; }
+.telemetry-h { font: 600 11px ui-monospace, monospace; color: #93c5fd; letter-spacing: 0.04em; text-shadow: 0 1px 2px #000, 0 0 3px #000; margin-bottom: 4px; }
+.telemetry-body { overflow-y: auto; max-height: calc(36vh - 22px); pointer-events: auto; }
+.telemetry-l { font: 11px ui-monospace, monospace; color: #d7e0ea; line-height: 1.55; text-shadow: 0 1px 2px #000, 0 0 3px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.light .telemetry-h { color: #1d4ed8; text-shadow: 0 1px 2px #fff, 0 0 3px #fff; }
+body.light .telemetry-l { color: #0f172a; text-shadow: 0 1px 2px #fff, 0 0 3px #fff; }
