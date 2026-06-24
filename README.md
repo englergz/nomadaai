@@ -19,6 +19,7 @@ Trabajo de Grado, **Maestría en Gestión de Tecnologías de la Información y d
 **Autores**: 
 - Engler González. 
 - PhD. Andrés Calderón. (**Director**)
+
 **Ejemplo de uso** / *ver [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Método, modelos y técnicas; inyección por terminal*
 ```bash
 BASE="https://englergz-nomadaai.hf.space"
