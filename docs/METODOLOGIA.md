@@ -104,8 +104,7 @@ espacio-temporal [52].
 ## 7. Procedencia de los datos y trabajo base
 
 La simulación de movilidad de Tumaco (red vial, generación de trayectorias con SUMO) parte del
-trabajo base del director de tesis, PhD. Andrés Oswaldo Calderón Romero [T0]. Sobre esa base se
-construyeron las representaciones, la zonificación, los modelos y la aplicación de este trabajo.
+trabajo base del director de tesis, PhD. Andrés Oswaldo Calderón Romero [T0]. Sobre esa base se construyeron las representaciones.
 
 ## 8. Inyección de datos al modelo desde terminal (sin la interfaz)
 

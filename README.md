@@ -18,7 +18,9 @@ Trabajo de Grado, **Maestría en Gestión de Tecnologías de la Información y d
 
 **Autores**: 
 - Engler González. 
-- PhD. Andrés Calderón. (**Director**)
+- PhD. Andrés Calderón. (**Director**) *Research — Scripts/SUMO* (software/repositorio base de simulación de movilidad). GitHub. [En línea]. Disponible: https://github.com/aocalderon/Research/tree/master/Scripts/SUMO
+
+**Ejemplo de uso** / *ver [docs/DEPLOY.md](docs/DEPLOY.md) | Despliegue*
 ```bash
 BASE="https://englergz-nomadaai.hf.space"
 curl -s -X POST "$BASE/predict/online" -H 'content-type: application/json' -d '{
