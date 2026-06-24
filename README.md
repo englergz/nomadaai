@@ -30,6 +30,10 @@ curl -s -X POST "$BASE/predict/online" -H 'content-type: application/json' -d '{
 Este árbol `app/` es la **aplicación** (backend + frontend) construida sobre la investigación de
 `../Research/`. Demo en vivo: **https://englergz-nomadaai.hf.space**
 
+> **Atribución.** La base de simulación de movilidad (red vial de Tumaco y generación de
+> trayectorias con SUMO) parte del trabajo del director, PhD. Andrés Oswaldo Calderón Romero:
+> https://github.com/aocalderon/Research/tree/master/Scripts/SUMO
+
 ## Objetivos específicos
 
 - **OE1** — Caracterizar el desplazamiento y **predecir el destino** (modelo de IA).
@@ -41,6 +45,7 @@ Este árbol `app/` es la **aplicación** (backend + frontend) construida sobre l
 
 | Documento | Contenido |
 |-----------|-----------|
+| [docs/PARA_COWORK.md](docs/PARA_COWORK.md) | **Insumo para la tesis**: estado, resultados medibles, límites/supuestos, atribución |
 | [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Método, modelos y técnicas por OE, coherente con el anteproyecto; inyección por terminal |
 | [docs/MODELO_RIESGO.md](docs/MODELO_RIESGO.md) | Fundamentación y **variables** del riesgo (OE2), socioeconómicas + criminología ambiental |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura, stack, contrato de API, modelo de datos |

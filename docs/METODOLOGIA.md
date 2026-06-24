@@ -101,7 +101,13 @@ espacio-temporal [52].
   escenarios (hora × umbral × horizonte), reportando cobertura de rutas, anticipación (m/s) y la
   respuesta del riesgo a la hora del día.
 
-## 7. Inyección de datos al modelo desde terminal (sin la interfaz)
+## 7. Procedencia de los datos y trabajo base
+
+La simulación de movilidad de Tumaco (red vial, generación de trayectorias con SUMO) parte del
+trabajo base del director de tesis, PhD. Andrés Oswaldo Calderón Romero [T0]. Sobre esa base se
+construyeron las representaciones, la zonificación, los modelos y la aplicación de este trabajo.
+
+## 8. Inyección de datos al modelo desde terminal (sin la interfaz)
 
 La interfaz gráfica es solo un cliente; el modelo reside en la API. Se le inyecta la **secuencia de
 ubicaciones** capturadas hasta "ahora" (no el destino):
@@ -134,7 +140,9 @@ interactiva en `"$BASE/docs"`.
 - [50] S. R. Timarán-Pereira, G. J. Hernández-Garzón y N. E. Quemá-Taimbud, "Identificación de lesiones no fatales en la cartografía del municipio de Pasto con la técnica de agrupamiento," *Rev. Investig. Desarro. Innov.*, vol. 8, no. 1, pp. 147–159, dic. 2017, doi: 10.19053/20278306.v8.n1.2017.5793.
 - [52] S. Shekhar et al., "Spatiotemporal Data Mining: A Computational Perspective," *ISPRS Int. J. Geoinf.*, vol. 4, no. 4, pp. 2306–2338, oct. 2015, doi: 10.3390/ijgi4042306.
 
-### Referencias técnicas adicionales (verificar formato/inclusión con el director)
+### Referencias técnicas y de software (verificar formato/inclusión con el director)
+
+- [T0] A. O. Calderón Romero, *Research — Scripts/SUMO* (software/repositorio base de simulación de movilidad). GitHub. [En línea]. Disponible: https://github.com/aocalderon/Research/tree/master/Scripts/SUMO
 
 - [T1] X. Chang, E. Tanin, J. Qi et al., "Contrastive Trajectory Similarity Learning with Dual-Feature Attention (TrajCL)," *ICDE*, 2023.
 - [T2] Y. Chang, X. Cai, C. S. Jensen y J. Qi, "K Nearest Neighbor-Guided Trajectory Similarity Learning (TSMini)," *arXiv:2502.00285*, 2025. *(implementación base en `Research/TSMini`).*
