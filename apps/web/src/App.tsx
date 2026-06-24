@@ -224,10 +224,14 @@ export default function App() {
         body: JSON.stringify({ origin: d.origin, dest: d.dest, type: drawVeh || null }),
       });
       if (!r.ok) { setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
-      coords = (await r.json()).coords;
+      const j = await r.json();
+      coords = j.coords;
+      const adapted = j.vehicle_restricted
+        ? `adaptada a ${labelForType(drawVeh || "car")}`
+        : "red general";
+      setDrawMsg(`Ruta generada (${(j.distance_m / 1000).toFixed(2)} km · ${adapted}). Simulando…`);
     } catch (e) { setDrawMsg("Error: " + (e as Error).message); return; }
     excludeRef.current = null; typeRef.current = drawVeh || "car";
-    setDrawMsg("Ruta generada. Simulando…");
     startStream(coords);
   }
 

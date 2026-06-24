@@ -27,13 +27,16 @@ def route_build(
     modelo nunca vio como trayectoria: sirve para inyectar recorridos nuevos y probar
     la predicción sin sesgo. El destino NO se envía al modelo de predicción.
     """
-    r = graph.route(req.origin, req.dest)
+    r = graph.route(req.origin, req.dest, vtype=req.type)
     if r is None:
         raise HTTPException(
             status_code=422,
             detail="No se pudo trazar una ruta entre esos puntos (¿muy lejos de la red o iguales?).",
         )
-    return BuildRouteResponse(coords=r["coords"], distance_m=r["distance_m"], n=r["n"])
+    return BuildRouteResponse(
+        coords=r["coords"], distance_m=r["distance_m"], n=r["n"],
+        vehicle_restricted=r.get("vehicle_restricted", False),
+    )
 
 
 @router.post("/safe", response_model=RouteResponse)

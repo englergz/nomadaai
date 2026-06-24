@@ -87,6 +87,7 @@ class BuildRouteResponse(BaseModel):
     coords: list[Coordinate]
     distance_m: float
     n: int
+    vehicle_restricted: bool = False
 
 
 # --- Ruteo seguro (OE3 - stub tipado) ---
