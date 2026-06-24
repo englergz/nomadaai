@@ -125,8 +125,10 @@ export default function App() {
       try {
         const fc = (await api.corridors(undefined, 8000)) as ApiFC;
         map.addSource("corridors", { type: "geojson", data: fc as never });
-        map.addLayer({ id: "corridors", type: "line", source: "corridors",
-          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.18 } });
+        map.addLayer({
+          id: "corridors", type: "line", source: "corridors",
+          paint: { "line-color": "#9aa7b2", "line-width": 1, "line-opacity": 0.18 }
+        });
       } catch (e) { console.error(e); }
 
       map.addSource("risk", { type: "geojson", data: emptyFC() as never });
@@ -138,8 +140,10 @@ export default function App() {
           "fill-opacity": ["interpolate", ["linear"], ["get", "risk_norm"], 0, 0.12, 1, 0.6],
         },
       } as never);
-      map.addLayer({ id: "risk-line", type: "line", source: "risk",
-        paint: { "line-color": "#0b0e12", "line-width": 0.4, "line-opacity": 0.3 } } as never);
+      map.addLayer({
+        id: "risk-line", type: "line", source: "risk",
+        paint: { "line-color": "#0b0e12", "line-width": 0.4, "line-opacity": 0.3 }
+      } as never);
       addLine(map, "observed", { "line-color": "#2f81f7", "line-width": 5 });
       addLine(map, "pred", { "line-color": "#f97316", "line-width": 4, "line-dasharray": [1.5, 1] });
       addPoint(map, "endpoints", { "circle-radius": 6, "circle-color": "#a855f7", "circle-stroke-color": "#fff", "circle-stroke-width": 2 });
@@ -382,7 +386,7 @@ export default function App() {
 
         <div className="tabs">
           <button className={mode === "test" ? "on" : ""} onClick={() => setMode("test")} disabled={running}>Viaje no visto</button>
-          <button className={mode === "draw" ? "on" : ""} onClick={() => setMode("draw")} disabled={running}>Ruta nueva (yo elijo)</button>
+          <button className={mode === "draw" ? "on" : ""} onClick={() => setMode("draw")} disabled={running}>Ruta nueva</button>
         </div>
 
         {mode === "test" ? (
