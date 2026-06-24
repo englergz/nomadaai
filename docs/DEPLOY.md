@@ -1,4 +1,4 @@
-# Despliegue en la nube (gratis)
+# Despliegue en la nube
 
 Arquitectura de despliegue:
 
