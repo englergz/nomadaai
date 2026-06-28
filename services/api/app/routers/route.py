@@ -36,6 +36,7 @@ def route_build(
     return BuildRouteResponse(
         coords=r["coords"], distance_m=r["distance_m"], n=r["n"],
         vehicle_restricted=r.get("vehicle_restricted", False),
+        directional=r.get("directional", True),
     )
 
 

@@ -88,6 +88,7 @@ class BuildRouteResponse(BaseModel):
     distance_m: float
     n: int
     vehicle_restricted: bool = False
+    directional: bool = True
 
 
 # --- Ruteo seguro (OE3 - stub tipado) ---

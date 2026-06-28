@@ -204,3 +204,13 @@ body.light .push-title { color: #b91c1c; }
 body.light .push-body { color: #991b1b; }
 body.light .risk-pill { color: #0f766e; }
 body.light .risk-pill.hi { color: #b91c1c; }
+
+/* Hora en la notificación (estilo móvil) */
+.push-head { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.push-time { font-size: 10px; color: #fca5a5; flex: none; }
+body.light .push-time { color: #b91c1c; }
+
+/* Efectividad en vivo */
+.livecard { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(47,129,247,0.08); }
+.livecard-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 4px; }
+.livecard-row { font-size: 12px; color: var(--text); margin-top: 2px; }

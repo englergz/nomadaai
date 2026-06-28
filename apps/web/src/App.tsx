@@ -54,7 +54,8 @@ function vehicleSVG(t?: string): string {
   return `<svg width="30" height="30" viewBox="0 0 40 40">${sh}<g filter="url(#vs)"><rect x="12.5" y="6" width="15" height="28" rx="6.5" fill="#1f2937" stroke="#fff" stroke-width="1.5"/><path d="M15 13 Q20 9.5 25 13 L25 17 L15 17 Z" fill="#9cd2ff"/><rect x="15" y="25.5" width="10" height="5.5" rx="2.5" fill="#4b5563"/></g></svg>`;
 }
 
-interface Notif { id: number; title: string; body: string; }
+interface Notif { id: number; title: string; body: string; time: string; }
+interface LiveStats { n: number; fde: number; h50: number; h100: number; alerts: number; }
 
 export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -93,6 +94,8 @@ export default function App() {
   const [clock, setClock] = useState(20 * 3600);
   const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
+  const liveRef = useRef<LiveStats>({ n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 });
   const [log, setLog] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
   const [drawMsg, setDrawMsg] = useState("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
@@ -235,6 +238,7 @@ export default function App() {
     if (vehMarkerRef.current) { vehMarkerRef.current.remove(); vehMarkerRef.current = null; }
     drawRef.current = {};
     setFinished(false); setNotifs([]); setLog([]); setLiveRisk(null);
+    liveRef.current = { n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 }; setLiveStats(null);
     setProgress(0); setPredInfo("—"); lastCellRef.current = ""; distRef.current = 0;
     setDrawMsg("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
   }
@@ -263,10 +267,9 @@ export default function App() {
       if (!r.ok) { setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
       const j = await r.json();
       coords = j.coords;
-      const adapted = j.vehicle_restricted
-        ? `adaptada a ${labelForType(drawVeh || "car")}`
-        : "red general";
-      setDrawMsg(`Ruta generada (${(j.distance_m / 1000).toFixed(2)} km · ${adapted}). Simulando…`);
+      const adapted = j.vehicle_restricted ? `adaptada a ${labelForType(drawVeh || "car")}` : "red general";
+      const dir = j.directional ? "respeta sentidos" : "sin sentido estricto";
+      setDrawMsg(`Ruta ${(j.distance_m / 1000).toFixed(2)} km · ${adapted} · ${dir}. Simulando…`);
     } catch (e) { setDrawMsg("Error: " + (e as Error).message); return; }
     excludeRef.current = null; typeRef.current = drawVeh || "car";
     startStream(coords);
@@ -339,6 +342,15 @@ export default function App() {
         if (cand) {
           setLine(map, "pred", cand.geometry.coordinates as [number, number][]);
           pushLog(`← pred: vecino ${cand.neighbor_id} · ${cand.length_m.toFixed(0)} m · conf ${(cand.confidence * 100).toFixed(0)}%`);
+          // EFECTIVIDAD EN VIVO: comparar el punto predicho con el punto REAL del recorrido
+          // que se está siguiendo (sirve para test y para rutas nuevas).
+          const predEnd = cand.geometry.coordinates[cand.geometry.coordinates.length - 1] as [number, number];
+          const realAhead = interpAt(coords, cum, Math.min(total, d + cand.length_m));
+          const fde = haversine(predEnd, realAhead);
+          const L = liveRef.current;
+          L.n += 1; L.fde += fde; if (fde <= 50) L.h50 += 1; if (fde <= 100) L.h100 += 1;
+          setLiveStats({ ...L });
+          pushLog(`   efectividad: error ${fde.toFixed(0)} m (acumulado ${L.n} predicciones)`);
         }
         const a = res.alert;
         if (a) {
@@ -349,12 +361,13 @@ export default function App() {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (a.cell_id && a.cell_id !== lastCellRef.current) {
               lastCellRef.current = a.cell_id;
-              const eta = `${String(a.hour).padStart(2, "0")}:${String(a.arrival_min ?? 0).padStart(2, "0")}`;
+              liveRef.current.alerts += 1;
               const id = ++notifIdRef.current;
               setNotifs((prev) => [{
                 id,
                 title: "⚠️ Alerta de seguridad",
-                body: `Zona ${a.cell_id} de alto riesgo (${(a.risk_norm * 100).toFixed(0)}%) a ~${a.distance_m.toFixed(0)} m · llegarías ${eta}. Considera desvío.`,
+                time: fmtClock(clockRef.current).slice(0, 5),
+                body: `Zona ${a.cell_id} de alto riesgo (${(a.risk_norm * 100).toFixed(0)}%) a ~${a.distance_m.toFixed(0)} m. Considera un desvío.`,
               }, ...prev].slice(0, 20));
             }
           } else { setPoint(map, "danger", null); }
@@ -468,6 +481,19 @@ export default function App() {
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
         <p className="hint">{predInfo}</p>
 
+        {liveStats && liveStats.n > 0 && (
+          <div className="livecard">
+            <div className="livecard-h">Efectividad en vivo (esta sesión · incluye rutas nuevas)</div>
+            <div className="livecard-row">
+              <b>{Math.round((100 * liveStats.h50) / liveStats.n)}%</b> acierto ≤50 m ·
+              error medio <b>{(liveStats.fde / liveStats.n).toFixed(0)} m</b>
+            </div>
+            <div className="livecard-row">
+              {liveStats.n} predicciones · {Math.round((100 * liveStats.h100) / liveStats.n)}% ≤100 m · {liveStats.alerts} alertas
+            </div>
+          </div>
+        )}
+
         <div className="legend">
           <span className="leg"><span className="dot blue" /> capturado</span>
           <span className="leg"><span className="dot orange" /> predicho</span>
@@ -498,7 +524,7 @@ export default function App() {
           <div className="notif-stack">
             {notifs.map((n) => (
               <div className="push" key={n.id}>
-                <div className="push-title">{n.title}</div>
+                <div className="push-head"><span className="push-title">{n.title}</span><span className="push-time">{n.time}</span></div>
                 <div className="push-body">{n.body}</div>
               </div>
             ))}

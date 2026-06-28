@@ -31,9 +31,14 @@ def _width(t: str | None) -> int:
 
 class RouteGraph:
     def __init__(self, true_dict: dict, cell: float = 18.0) -> None:
-        """`cell` = tamaño de cuantización en metros (resolución del grafo)."""
+        """`cell` = tamaño de cuantización en metros (resolución del grafo).
+
+        Grafo **dirigido**: cada segmento A→B se agrega en el sentido en que el agente lo
+        recorrió. Una calle de doble sentido tendrá ambas aristas (agentes en los dos
+        sentidos); una de sentido único tendrá solo una → el ruteo respeta el tránsito.
+        """
         self.cell = cell
-        g = nx.Graph()
+        g = nx.DiGraph()
         node_xy: dict[tuple[int, int], tuple[float, float]] = {}
 
         def key(x: float, y: float) -> tuple[int, int]:
@@ -80,18 +85,21 @@ class RouteGraph:
             return None
 
         w_need = _width(vtype)
-        graph: nx.Graph = self.g
-        restricted = False
+        # Cadena de intentos (preferir respetar sentido y tipo; degradar con honestidad):
+        attempts = []
         if w_need > 0:
-            # subgrafo con calles transitables por el tipo (ancho de tramo >= ancho del vehículo)
-            graph = nx.subgraph_view(self.g, filter_edge=lambda u, v: self.g[u][v]["mw"] >= w_need)
-            restricted = True
+            typed = nx.subgraph_view(self.g, filter_edge=lambda u, v: self.g[u][v]["mw"] >= w_need)
+            attempts.append((typed, True, True))            # direccional + tipo
+        attempts.append((self.g, False, True))               # direccional, todos los tipos
+        attempts.append((self.g.to_undirected(as_view=True), False, False))  # último recurso
 
         path = None
-        for gtry, restr in ((graph, restricted), (self.g, False)):
+        restricted = False
+        directional = True
+        for gtry, restr, direc in attempts:
             try:
                 path = nx.shortest_path(gtry, a, b, weight="w")
-                restricted = restr
+                restricted, directional = restr, direc
                 break
             except (nx.NetworkXNoPath, nx.NodeNotFound):
                 path = None
@@ -109,4 +117,4 @@ class RouteGraph:
                 dist += math.hypot(x - prev_xy[0], y - prev_xy[1])
             prev_xy = (x, y)
         return {"coords": coords, "distance_m": round(dist, 1), "n": len(coords),
-                "vehicle_restricted": restricted}
+                "vehicle_restricted": restricted, "directional": directional}
