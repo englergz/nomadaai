@@ -43,16 +43,28 @@ Este árbol `app/` es la **aplicación** (backend + frontend) construida sobre l
 - **OE3** — **Recomendación de rutas seguras** y **alerta anticipada** (integra OE1+OE2).
 - **OE4** — **Evaluar la efectividad** mediante simulaciones (train/test, ajuste de parámetros).
 
-## Documentación
+## Documentación (centralizada y canónica)
 
+Toda la documentación vive aquí, en `app/docs/` (citación **IEEE**). Es el origen único; los
+documentos de `Research/analysis_v2/` apuntan a estos.
+
+**Mapa y método**
 | Documento | Contenido |
 |-----------|-----------|
-| [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Método, modelos y técnicas por OE, inyección por terminal |
-| [docs/MODELO_RIESGO.md](docs/MODELO_RIESGO.md) | Fundamentación y **variables** del riesgo (OE2), socioeconómicas + criminología ambiental |
+| [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Mapa metodológico: paradigma, 4 OE, fases, datos/variables, evaluación, inyección por terminal |
+| [docs/PARA_COWORK.md](docs/PARA_COWORK.md) | Insumo para redactar la tesis: estado, resultados medibles, límites/supuestos, atribución |
+
+**Modelos (documentos canónicos, con figuras)**
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/MODELO_PREDICCION.md](docs/MODELO_PREDICCION.md) | **OE1** — predicción de destino: caracterización (TrajCL/TRACLUS/Fréchet), método KNN+rumbo, ablation, métrica FDE, resultados |
+| [docs/MODELO_RIESGO.md](docs/MODELO_RIESGO.md) | **OE2** — Índice de Riesgo Urbano (RTM): factores F1–F8, fórmula, pesos (vías A/B/C), sensibilidad, ética, reporte ciudadano |
+
+**Ingeniería**
+| Documento | Contenido |
+|-----------|-----------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura, stack, contrato de API, modelo de datos |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Despliegue (Hugging Face Space + Supabase) |
-
-> **Citación: IEEE** en toda la documentación; la numeración `[n]` coincide con el anteproyecto.
 
 ## Estructura
 

@@ -36,38 +36,18 @@ Una **trayectoria** = secuencia ordenada por `t` de puntos `(x, y)` de un `id` d
 
 > *Caracterizar datos de desplazamiento … para desarrollar un modelo de IA que prediga su destino.*
 
-**Caracterización de la movilidad.** Tres técnicas complementarias:
-- **Aprendizaje de representaciones** mediante un modelo **Transformer auto-supervisado
-  (contrastivo)** que codifica cada trayectoria en un *embedding*; trayectorias similares quedan
-  cercanas y su cercanía se mide por **similitud coseno** [33], [36]. (Implementación: TrajCL/TSMini
-  [T1], [T2]; salida `embeddings.npy`.)
-- **Descubrimiento de corredores** con **TRACLUS** (*partition-and-group*): segmenta cada
-  trayectoria y agrupa los segmentos con **DBSCAN** (clustering por densidad) [T3], [T4]. La
-  agrupación espacial de eventos para descubrir estructuras es coherente con la minería de datos
-  espacio-temporal [52] y con técnicas de agrupamiento aplicadas en el contexto nariñense [50].
-- **Recuperación de trayectorias similares** mediante **distancia de Fréchet** [T5].
-
-**Predicción de destino.** Método por **recuperación/analogía**: a partir del último punto observado
-y el **rumbo**, se buscan con un **KDTree** (k-vecinos más cercanos) las trayectorias de
-*entrenamiento* que pasan por la misma zona en el mismo sentido, y su continuación se propone como
-predicción [31], [38]. Es interpretable y competitivo.
-
-> **Coherencia con el anteproyecto (declaración honesta):** el anteproyecto previó redes neuronales
-> recurrentes (RNN) para OE1; la implementación operativa es por analogía (KNN + rumbo). Es una
-> técnica de aprendizaje supervisado basado en instancias, defendible y reproducible; se documenta
-> la desviación y queda abierta la incorporación de un modelo neuronal supervisado para comparación.
+Caracterización (TrajCL/TSMini → embeddings + coseno; TRACLUS/DBSCAN → corredores; Fréchet →
+similares) y **predicción por recuperación/analogía (KNN + rumbo)**. **Documento canónico, con
+método, ablation, métrica y resultados:** [`MODELO_PREDICCION.md`](MODELO_PREDICCION.md).
 
 ## 4. Fase 2 — OE2: Modelo de riesgo delictivo por zonas
 
 > *Implementar un modelo predictivo de riesgos delictivos … técnicas de aprendizaje automático y
 > análisis de datos históricos.*
 
-Índice de **riesgo espacio-temporal `riesgo(zona, hora)`** sobre una **zonificación** en malla,
-fundamentado en la criminología ambiental y en variables socioeconómicas. Fundamentación, factores,
-fuentes y referencias completas en [`MODELO_RIESGO.md`](MODELO_RIESGO.md): teoría de actividades
-rutinarias y prevención situacional [6], [7]; desorganización social y eficacia colectiva
-[2], [22], [23]; factores sociodemográficos del delito en Colombia [21]; hot spots [13]; minería
-espacio-temporal [52].
+**Índice de Riesgo Urbano (IRU)** espacio-temporal y multivariable, construido con **Risk Terrain
+Modeling (RTM)**. **Documento canónico, con factores, fórmula, pesos, sensibilidad y referencias:**
+[`MODELO_RIESGO.md`](MODELO_RIESGO.md).
 
 ## 5. Fase 3 — OE3: Recomendación de rutas seguras y alerta
 
