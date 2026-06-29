@@ -214,3 +214,11 @@ body.light .push-time { color: #b91c1c; }
 .livecard { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(47,129,247,0.08); }
 .livecard-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 4px; }
 .livecard-row { font-size: 12px; color: var(--text); margin-top: 2px; }
+
+/* Reporte de efectividad ampliado */
+.evalsub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 12px 0 4px; }
+.evalsub:first-child { margin-top: 0; }
+.scn { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+.scn th, .scn td { text-align: center; padding: 3px 4px; border-bottom: 1px solid var(--border); }
+.scn th { color: var(--muted); font-weight: 600; }
+.scn td { color: var(--text); font-variant-numeric: tabular-nums; }

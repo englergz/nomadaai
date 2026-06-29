@@ -107,6 +107,8 @@ export default function App() {
   const [riskOn, setRiskOn] = useState(true);
   const [follow, setFollow] = useState(true);
   const [evalRes, setEvalRes] = useState<any>(null);
+  const [evalAlerts, setEvalAlerts] = useState<any>(null);
+  const [evalScn, setEvalScn] = useState<any[] | null>(null);
   const [evalLoading, setEvalLoading] = useState(false);
 
   const selectedTrip = trips.find((t) => t.id === tripId);
@@ -215,8 +217,14 @@ export default function App() {
   async function runEval() {
     setEvalLoading(true);
     try {
-      const r = await fetch(`${base()}/trajectories/evaluate`).then((x) => x.json());
-      setEvalRes(r);
+      const [pred, alerts, scn] = await Promise.all([
+        fetch(`${base()}/trajectories/evaluate`).then((x) => x.json()),
+        fetch(`${base()}/evaluate/alerts`).then((x) => x.json()),
+        fetch(`${base()}/evaluate/scenarios`).then((x) => x.json()),
+      ]);
+      setEvalRes(pred);
+      setEvalAlerts(alerts?.available ? alerts : null);
+      setEvalScn((scn?.scenarios || []).filter((s: any) => s.lookahead_m === 300));
     } catch (e) { alert("Error: " + (e as Error).message); }
     finally { setEvalLoading(false); }
   }
@@ -416,16 +424,38 @@ export default function App() {
         )}
 
         <button className="eval-btn" onClick={runEval} disabled={evalLoading}>
-          {evalLoading ? "Midiendo…" : "📊 Medir efectividad (test no visto)"}
+          {evalLoading ? "Midiendo…" : "📊 Medir efectividad"}
         </button>
         {evalRes && (
           <div className="evalcard">
+            <div className="evalsub">Predicción de destino (test no visto)</div>
             <div className="evalbig">{evalRes.overall.acc_50m_pct}% <span>acierto ≤50 m</span></div>
-            <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b></div>
-            <div className="evalrow">evaluadas: <b>{evalRes.evaluated}</b> no vistas (de {evalRes.n_test})</div>
+            <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b> · {evalRes.evaluated} viajes</div>
             {Object.entries(evalRes.by_type).map(([t, v]: any) => (
               <div className="evalrow" key={t}>{labelForType(t)}: {v.acc_50m_pct}% ≤50 m (n={v.n})</div>
             ))}
+
+            {evalAlerts && (
+              <>
+                <div className="evalsub">Protección — la alerta avisa a tiempo (OE4)</div>
+                <div className="evalbig">{evalAlerts.pct_anticipadas}% <span>avisos ANTES de la zona</span></div>
+                <div className="evalrow">{evalAlerts.pct_con_alerta}% de viajes con alerta · anticipación media <b>{evalAlerts.anticipacion_media_m} m</b> (~{evalAlerts.anticipacion_media_s} s)</div>
+              </>
+            )}
+
+            {evalScn && evalScn.length > 0 && (
+              <>
+                <div className="evalsub">Escenarios (look-ahead 300 m)</div>
+                <table className="scn">
+                  <thead><tr><th>Hora</th><th>Umbral</th><th>% riesgo</th><th>% a tiempo</th></tr></thead>
+                  <tbody>
+                    {evalScn.map((s, i) => (
+                      <tr key={i}><td>{String(s.hora).padStart(2, "0")}:00</td><td>{s.umbral}</td><td>{s.pct_con_riesgo}%</td><td>{s.pct_anticipadas}%</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
           </div>
         )}
 

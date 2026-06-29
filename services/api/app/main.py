@@ -19,7 +19,7 @@ from app.core.config import get_settings
 from app.data.corridors import CorridorStore
 from app.data.risk import RiskStore
 from app.ml.destination import DestinationPredictor
-from app.routers import corridors, health, predict, risk, route, trajectories
+from app.routers import corridors, evaluation, health, predict, risk, route, trajectories
 
 logger = logging.getLogger("nomadaai")
 logging.basicConfig(level=logging.INFO)
@@ -101,6 +101,7 @@ def create_app() -> FastAPI:
     app.include_router(trajectories.router)
     app.include_router(risk.router)
     app.include_router(route.router)
+    app.include_router(evaluation.router)
 
     # Frontend estático (despliegue single-Space): se monta al final para no
     # tapar las rutas de la API. html=True sirve index.html en "/".
