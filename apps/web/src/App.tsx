@@ -56,6 +56,9 @@ function vehicleSVG(t?: string): string {
 
 interface Notif { id: number; title: string; body: string; time: string; }
 interface LiveStats { n: number; fde: number; h50: number; h100: number; alerts: number; }
+interface LiveBuckets { test: LiveStats; draw: LiveStats; }
+const emptyStats = (): LiveStats => ({ n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 });
+const emptyBuckets = (): LiveBuckets => ({ test: emptyStats(), draw: emptyStats() });
 
 export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -94,8 +97,8 @@ export default function App() {
   const [clock, setClock] = useState(20 * 3600);
   const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [liveStats, setLiveStats] = useState<LiveStats | null>(null);
-  const liveRef = useRef<LiveStats>({ n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 });
+  const [liveStats, setLiveStats] = useState<LiveBuckets | null>(null);
+  const liveRef = useRef<LiveBuckets>(emptyBuckets());
   const [log, setLog] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
   const [drawMsg, setDrawMsg] = useState("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
@@ -246,7 +249,7 @@ export default function App() {
     if (vehMarkerRef.current) { vehMarkerRef.current.remove(); vehMarkerRef.current = null; }
     drawRef.current = {};
     setFinished(false); setNotifs([]); setLog([]); setLiveRisk(null);
-    liveRef.current = { n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 }; setLiveStats(null);
+    liveRef.current = emptyBuckets(); setLiveStats(null);
     setProgress(0); setPredInfo("—"); lastCellRef.current = ""; distRef.current = 0;
     setDrawMsg("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
   }
@@ -355,10 +358,10 @@ export default function App() {
           const predEnd = cand.geometry.coordinates[cand.geometry.coordinates.length - 1] as [number, number];
           const realAhead = interpAt(coords, cum, Math.min(total, d + cand.length_m));
           const fde = haversine(predEnd, realAhead);
-          const L = liveRef.current;
+          const L = excludeRef.current ? liveRef.current.test : liveRef.current.draw;
           L.n += 1; L.fde += fde; if (fde <= 50) L.h50 += 1; if (fde <= 100) L.h100 += 1;
-          setLiveStats({ ...L });
-          pushLog(`   efectividad: error ${fde.toFixed(0)} m (acumulado ${L.n} predicciones)`);
+          setLiveStats({ test: { ...liveRef.current.test }, draw: { ...liveRef.current.draw } });
+          pushLog(`   efectividad: error ${fde.toFixed(0)} m (${excludeRef.current ? "no visto" : "ruta nueva"}, acum ${L.n})`);
         }
         const a = res.alert;
         if (a) {
@@ -369,7 +372,7 @@ export default function App() {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (a.cell_id && a.cell_id !== lastCellRef.current) {
               lastCellRef.current = a.cell_id;
-              liveRef.current.alerts += 1;
+              (excludeRef.current ? liveRef.current.test : liveRef.current.draw).alerts += 1;
               const id = ++notifIdRef.current;
               setNotifs((prev) => [{
                 id,
@@ -511,16 +514,25 @@ export default function App() {
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
         <p className="hint">{predInfo}</p>
 
-        {liveStats && liveStats.n > 0 && (
+        {liveStats && (liveStats.test.n > 0 || liveStats.draw.n > 0) && (
           <div className="livecard">
-            <div className="livecard-h">Efectividad en vivo (esta sesión · incluye rutas nuevas)</div>
-            <div className="livecard-row">
-              <b>{Math.round((100 * liveStats.h50) / liveStats.n)}%</b> acierto ≤50 m ·
-              error medio <b>{(liveStats.fde / liveStats.n).toFixed(0)} m</b>
-            </div>
-            <div className="livecard-row">
-              {liveStats.n} predicciones · {Math.round((100 * liveStats.h100) / liveStats.n)}% ≤100 m · {liveStats.alerts} alertas
-            </div>
+            <div className="livecard-h">Efectividad en vivo · comparativa (esta sesión)</div>
+            <table className="scn">
+              <thead><tr><th></th><th>No visto</th><th>Ruta nueva</th></tr></thead>
+              <tbody>
+                <tr><td>acierto ≤50 m</td>
+                  <td>{liveStats.test.n ? Math.round((100 * liveStats.test.h50) / liveStats.test.n) + "%" : "—"}</td>
+                  <td>{liveStats.draw.n ? Math.round((100 * liveStats.draw.h50) / liveStats.draw.n) + "%" : "—"}</td></tr>
+                <tr><td>error medio</td>
+                  <td>{liveStats.test.n ? (liveStats.test.fde / liveStats.test.n).toFixed(0) + " m" : "—"}</td>
+                  <td>{liveStats.draw.n ? (liveStats.draw.fde / liveStats.draw.n).toFixed(0) + " m" : "—"}</td></tr>
+                <tr><td>nº predicciones</td>
+                  <td>{liveStats.test.n || "—"}</td><td>{liveStats.draw.n || "—"}</td></tr>
+                <tr><td>alertas</td>
+                  <td>{liveStats.test.alerts || "—"}</td><td>{liveStats.draw.alerts || "—"}</td></tr>
+              </tbody>
+            </table>
+            <div className="livecard-row" style={{ marginTop: 4 }}>Corre viajes <b>no vistos</b> y <b>rutas nuevas</b> para comparar la generalización.</div>
           </div>
         )}
 
