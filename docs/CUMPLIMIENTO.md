@@ -12,10 +12,10 @@
 | OE1 | Informe de caracterización (calidad, patrones) | 🟡 | Caracterización hecha (TrajCL, TRACLUS, Fréchet); falta redactarla como "informe" formal en la tesis. |
 | **OE2** | Modelo de IA de riesgo, **precisión > 85%** | ⚠️ **Vacío clave** | El riesgo es un **índice compuesto (RTM)** fundamentado, **no un predictor validado**: no hay precisión medida porque falta **microdato de delito georreferenciado (DIJIN)** para calibrar/validar (RTM/PAI). Hoy no se puede afirmar el 85%. |
 | OE2 | Informe de datos de riesgo (calidad, patrones) | 🟡 | Variables reales integradas (TerriData IPM, servicios); incidentes a nivel **municipal**, no punto; socioeconómico **municipal/urbano-rural**, no manzana. |
-| **OE3** | Sistema de **recomendación de rutas seguras** (minimiza exposición), **~69%** + tiempo real | 🟡 **Parcial** | Hay **alerta anticipada** (avisa antes, 88.7%) + ruteo **direccional y por tipo**. **Falta:** el ruteo **ponderado por riesgo** (calcular el desvío que *minimiza* la exposición); `/route/safe` aún es por distancia. |
+| **OE3** | Sistema de **recomendación de rutas seguras** (minimiza exposición), **~69%** + tiempo real | ✅ **Cumplido** | **Alerta anticipada** (88.7%) + ruteo **direccional, por tipo y ponderado por riesgo**: `/route/build` calcula el **desvío que minimiza la exposición** y lo compara con la ruta directa (`risk_weight` = λ). |
 | OE3 | Panel con **≥3 capas** (riesgo, POIs, rutas) | 🟡 | Tiene riesgo + ruta + recorrido + corredores (≥3). **Falta la capa de POIs** (puntos de interés, F5 pendiente). |
 | **OE4** | Evaluación en **≥5 escenarios**, cuali+cuanti | ✅/🟡 | **45 escenarios** (hora×umbral×look-ahead) cuantitativos + efectividad de alerta. Cuantitativo cubierto; falta el componente cualitativo. |
-| OE4 | **Mejora de percepción de seguridad ≥30%** | ⚠️ **Vacío** | No hay estudio de percepción (requiere usuarios/encuesta; con datos simulados no aplica directo). **Propuesta:** reemplazar por un proxy **cuantitativo** defendible: *% de reducción de exposición al riesgo de la ruta recomendada vs. la directa* (requiere OE3 ponderado por riesgo). |
+| OE4 | **Mejora de percepción de seguridad ≥30%** | 🟡 **Proxy disponible** | El estudio de percepción (encuesta) no aplica con datos simulados. **Proxy cuantitativo ya implementado:** *% de reducción de exposición al riesgo de la ruta segura vs. la directa* (`/route/build` → `comparison.exposure_reduction_pct`). Falta correrlo sistemáticamente sobre varios O-D y reportarlo. |
 | OE4 | Sistema optimizado, **95% funcionalidad sin errores críticos** | 🟡 | App desplegada y operativa (HF Space); falta un **informe de QA** formal (cobertura de pruebas, tasa de errores). |
 
 ## Lo que está sólido (fortalezas)
@@ -34,9 +34,9 @@
    medida del riesgo. *Acciones:* (a) gestionar el microdato (oficio en `data_sources/`); (b) mientras
    tanto, declarar el riesgo como **índice teórico-fundamentado** y validar la **calibración de pesos**
    por análisis de sensibilidad (ya hecho), no como "predictor 85%".
-2. **Ruteo ponderado por riesgo (OE3).** Hoy se **avisa** pero no se **calcula la ruta más segura**.
-   *Acción:* aplicar `peso = distancia·(1+λ·riesgo)` en el grafo dirigido (ya existe la estructura) y
-   devolver la ruta alternativa; con eso nace el proxy de OE4.
+2. ~~Ruteo ponderado por riesgo (OE3).~~ ✅ **HECHO:** `/route/build` calcula la ruta segura con
+   `peso = distancia·(1+λ·riesgo)` sobre el grafo dirigido y la compara con la directa
+   (reducción de exposición). Pendiente menor: correr el proxy de OE4 sobre un set de O-D y reportarlo.
 3. **Indicador de percepción ≥30% (OE4).** Reformular a un **proxy cuantitativo** (reducción de
    exposición ruta segura vs. directa) y/o declarar el estudio de percepción como trabajo futuro.
 4. **Granularidad de datos:** censo DANE por **manzana** (F3), **POIs** OSM (F4/capa del panel),

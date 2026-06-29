@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app import state
 from app.ml.router import RouteGraph
 from app.ml.routing import safe_route
 from app.models.schemas import (
     BuildRouteRequest,
     BuildRouteResponse,
     LineStringGeometry,
+    RouteComparison,
     RouteRequest,
     RouteResponse,
 )
@@ -27,16 +29,22 @@ def route_build(
     modelo nunca vio como trayectoria: sirve para inyectar recorridos nuevos y probar
     la predicción sin sesgo. El destino NO se envía al modelo de predicción.
     """
-    r = graph.route(req.origin, req.dest, vtype=req.type)
+    r = graph.route(
+        req.origin, req.dest, vtype=req.type,
+        hour=req.hour, risk_weight=req.risk_weight, risk=state.risk,
+    )
     if r is None:
         raise HTTPException(
             status_code=422,
             detail="No se pudo trazar una ruta entre esos puntos (¿muy lejos de la red o iguales?).",
         )
+    comp = r.get("comparison")
     return BuildRouteResponse(
         coords=r["coords"], distance_m=r["distance_m"], n=r["n"],
         vehicle_restricted=r.get("vehicle_restricted", False),
         directional=r.get("directional", True),
+        direct_coords=r.get("direct_coords", []),
+        comparison=RouteComparison(**comp) if comp else None,
     )
 
 

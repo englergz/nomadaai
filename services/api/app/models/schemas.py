@@ -80,15 +80,27 @@ class OnlineResponse(BaseModel):
 class BuildRouteRequest(BaseModel):
     origin: Coordinate  # [lon, lat] — dónde estoy
     dest: Coordinate    # [lon, lat] — a dónde voy
-    type: Optional[str] = None  # vehículo (opcional, para la animación)
+    type: Optional[str] = None  # vehículo (opcional)
+    hour: int = Field(default=19, ge=0, le=23)
+    risk_weight: float = Field(default=0.0, ge=0.0, le=5.0)  # λ: prioridad de seguridad
+
+
+class RouteComparison(BaseModel):
+    safe_distance_m: float
+    direct_distance_m: float
+    safe_exposure: float
+    direct_exposure: float
+    exposure_reduction_pct: float
 
 
 class BuildRouteResponse(BaseModel):
-    coords: list[Coordinate]
+    coords: list[Coordinate]              # ruta segura (la que se simula)
     distance_m: float
     n: int
     vehicle_restricted: bool = False
     directional: bool = True
+    direct_coords: list[Coordinate] = []  # ruta directa (para comparar)
+    comparison: Optional[RouteComparison] = None
 
 
 # --- Ruteo seguro (OE3 - stub tipado) ---

@@ -75,8 +75,40 @@ class RouteGraph:
         _d, idx = self._tree.query([[x, y]], k=1)
         return self._keys[int(idx[0][0])]
 
-    def route(self, origin: list[float], dest: list[float], vtype: str | None = None) -> dict | None:
-        """origin/dest = [lon, lat]. `vtype` filtra calles según accesibilidad del vehículo."""
+    def _node_risk(self, hour: int, risk) -> dict:
+        """Riesgo normalizado [0,1] de la zona de cada nodo a una hora (cacheado por hora)."""
+        if not hasattr(self, "_nr_cache"):
+            self._nr_cache = {}
+        h = int(hour) % 24
+        if h in self._nr_cache:
+            return self._nr_cache[h]
+        nr = {}
+        for k in self._keys:
+            x, y = self._xy[self._index[k]]
+            lon, lat = to_wgs84(x, y)
+            nr[k] = risk.risk_at(lon, lat, h)[1]  # risk_norm
+        self._nr_cache[h] = nr
+        return nr
+
+    def _metrics(self, path, nr) -> dict:
+        """coords lon/lat, distancia (m) y exposición al riesgo (Σ longitud·riesgo) de un camino."""
+        coords, dist, expo, prev = [], 0.0, 0.0, None
+        for k in path:
+            x, y = self._xy[self._index[k]]
+            lon, lat = to_wgs84(x, y)
+            coords.append([float(lon), float(lat)])
+            if prev is not None:
+                seg = math.hypot(x - prev[0], y - prev[1])
+                dist += seg
+                if nr is not None:
+                    expo += seg * 0.5 * (nr.get(prev[2], 0.0) + nr.get(k, 0.0))
+            prev = (x, y, k)
+        return {"coords": coords, "distance_m": round(dist, 1), "exposure": round(expo, 1)}
+
+    def route(self, origin: list[float], dest: list[float], vtype: str | None = None,
+              hour: int = 19, risk_weight: float = 0.0, risk=None) -> dict | None:
+        """origin/dest = [lon, lat]. Devuelve la ruta SEGURA (ponderada por riesgo) y la compara
+        con la directa (más corta). `risk_weight` (λ) = prioridad de seguridad vs. distancia."""
         if self._tree is None:
             return None
         a = self._snap(origin[0], origin[1])
@@ -85,36 +117,49 @@ class RouteGraph:
             return None
 
         w_need = _width(vtype)
-        # Cadena de intentos (preferir respetar sentido y tipo; degradar con honestidad):
         attempts = []
         if w_need > 0:
             typed = nx.subgraph_view(self.g, filter_edge=lambda u, v: self.g[u][v]["mw"] >= w_need)
-            attempts.append((typed, True, True))            # direccional + tipo
-        attempts.append((self.g, False, True))               # direccional, todos los tipos
-        attempts.append((self.g.to_undirected(as_view=True), False, False))  # último recurso
+            attempts.append((typed, True, True))
+        attempts.append((self.g, False, True))
+        attempts.append((self.g.to_undirected(as_view=True), False, False))
 
-        path = None
-        restricted = False
-        directional = True
+        gsel, restricted, directional, path_direct = None, False, True, None
         for gtry, restr, direc in attempts:
             try:
-                path = nx.shortest_path(gtry, a, b, weight="w")
-                restricted, directional = restr, direc
+                path_direct = nx.shortest_path(gtry, a, b, weight="w")
+                gsel, restricted, directional = gtry, restr, direc
                 break
             except (nx.NetworkXNoPath, nx.NodeNotFound):
-                path = None
-        if path is None:
+                path_direct = None
+        if path_direct is None:
             return None
 
-        coords: list[list[float]] = []
-        dist = 0.0
-        prev_xy = None
-        for k in path:
-            x, y = self._xy[self._index[k]]
-            lon, lat = to_wgs84(x, y)
-            coords.append([float(lon), float(lat)])
-            if prev_xy is not None:
-                dist += math.hypot(x - prev_xy[0], y - prev_xy[1])
-            prev_xy = (x, y)
-        return {"coords": coords, "distance_m": round(dist, 1), "n": len(coords),
-                "vehicle_restricted": restricted, "directional": directional}
+        nr = self._node_risk(hour, risk) if risk is not None else None
+
+        # Ruta segura: minimiza distancia·(1 + λ·riesgo)
+        path_safe = path_direct
+        if risk_weight > 0 and nr is not None:
+            def wfn(u, v, dd):
+                return dd["w"] * (1.0 + risk_weight * 0.5 * (nr.get(u, 0.0) + nr.get(v, 0.0)))
+            try:
+                path_safe = nx.shortest_path(gsel, a, b, weight=wfn)
+            except (nx.NetworkXNoPath, nx.NodeNotFound):
+                path_safe = path_direct
+
+        m_safe = self._metrics(path_safe, nr)
+        m_direct = self._metrics(path_direct, nr)
+        reduction = 0.0
+        if nr is not None and m_direct["exposure"] > 0:
+            reduction = round(100 * (m_direct["exposure"] - m_safe["exposure"]) / m_direct["exposure"], 1)
+
+        return {
+            "coords": m_safe["coords"], "distance_m": m_safe["distance_m"], "n": len(m_safe["coords"]),
+            "vehicle_restricted": restricted, "directional": directional,
+            "direct_coords": m_direct["coords"],
+            "comparison": {
+                "safe_distance_m": m_safe["distance_m"], "direct_distance_m": m_direct["distance_m"],
+                "safe_exposure": m_safe["exposure"], "direct_exposure": m_direct["exposure"],
+                "exposure_reduction_pct": reduction,
+            },
+        }

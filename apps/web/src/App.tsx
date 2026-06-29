@@ -90,6 +90,8 @@ export default function App() {
   const [drawVeh, setDrawVeh] = useState("");
   const [hour, setHour] = useState(20);
   const [threshold, setThreshold] = useState(70);
+  const [riskWeight, setRiskWeight] = useState(50); // prioridad de seguridad (0-100) → λ
+  const [safeMsg, setSafeMsg] = useState<string>("");
   const [timeScale, setTimeScale] = useState(60);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -169,6 +171,7 @@ export default function App() {
         id: "risk-line", type: "line", source: "risk",
         paint: { "line-color": "#0b0e12", "line-width": 0.4, "line-opacity": 0.3 }
       } as never);
+      addLine(map, "direct", { "line-color": "#94a3b8", "line-width": 3, "line-dasharray": [2, 2], "line-opacity": 0.7 });
       addLine(map, "observed", { "line-color": "#2f81f7", "line-width": 5 });
       addLine(map, "pred", { "line-color": "#f97316", "line-width": 4, "line-dasharray": [1.5, 1] });
       addPoint(map, "endpoints", { "circle-radius": 6, "circle-color": "#a855f7", "circle-stroke-color": "#fff", "circle-stroke-width": 2 });
@@ -242,13 +245,13 @@ export default function App() {
     const map = mapRef.current;
     if (map) {
       try {
-        setLine(map, "observed", []); setLine(map, "pred", []);
+        setLine(map, "observed", []); setLine(map, "pred", []); setLine(map, "direct", []);
         setPoint(map, "danger", null); setPoints(map, "endpoints", []);
       } catch (e) { console.error(e); }
     }
     if (vehMarkerRef.current) { vehMarkerRef.current.remove(); vehMarkerRef.current = null; }
     drawRef.current = {};
-    setFinished(false); setNotifs([]); setLog([]); setLiveRisk(null);
+    setFinished(false); setNotifs([]); setLog([]); setLiveRisk(null); setSafeMsg("");
     liveRef.current = emptyBuckets(); setLiveStats(null);
     setProgress(0); setPredInfo("—"); lastCellRef.current = ""; distRef.current = 0;
     setDrawMsg("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
@@ -268,16 +271,24 @@ export default function App() {
   async function startDraw() {
     const d = drawRef.current;
     if (!d.origin || !d.dest) { setDrawMsg("Marca primero origen y destino en el mapa."); return; }
-    setDrawMsg("Generando ruta sobre la red vial…");
+    setDrawMsg("Generando ruta segura sobre la red vial…");
     let coords: [number, number][] = [];
     try {
       const r = await fetch(`${base()}/route/build`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ origin: d.origin, dest: d.dest, type: drawVeh || null }),
+        body: JSON.stringify({ origin: d.origin, dest: d.dest, type: drawVeh || null,
+          hour, risk_weight: riskWeight / 20 }),  // λ ∈ [0,5]
       });
       if (!r.ok) { setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
       const j = await r.json();
       coords = j.coords;
+      const map = mapRef.current;
+      if (map && j.direct_coords) setLine(map, "direct", j.direct_coords as [number, number][]);
+      const c = j.comparison;
+      if (c) {
+        const extra = c.direct_distance_m ? Math.round(100 * (c.safe_distance_m - c.direct_distance_m) / c.direct_distance_m) : 0;
+        setSafeMsg(`Ruta segura: −${c.exposure_reduction_pct}% de exposición al riesgo vs. la directa (+${extra}% distancia).`);
+      }
       const adapted = j.vehicle_restricted ? `adaptada a ${labelForType(drawVeh || "car")}` : "red general";
       const dir = j.directional ? "respeta sentidos" : "sin sentido estricto";
       setDrawMsg(`Ruta ${(j.distance_m / 1000).toFixed(2)} km · ${adapted} · ${dir}. Simulando…`);
@@ -482,7 +493,10 @@ export default function App() {
             <select className="select" value={drawVeh} onChange={(e) => setDrawVeh(e.target.value)} disabled={running}>
               {DRAW_VEHICLES.map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
             </select>
+            <label className="lbl">Prioridad de seguridad: <b>{riskWeight}%</b> {riskWeight === 0 ? "(ruta más corta)" : "(evita riesgo)"}</label>
+            <input className="range" type="range" min={0} max={100} step={10} value={riskWeight} onChange={(e) => setRiskWeight(Number(e.target.value))} disabled={running} />
             <p className="hint" style={{ marginTop: 6 }}>{drawMsg}</p>
+            {safeMsg && <div className="metric">{safeMsg}</div>}
           </>
         )}
 
@@ -540,6 +554,7 @@ export default function App() {
           <span className="leg"><span className="dot blue" /> capturado</span>
           <span className="leg"><span className="dot orange" /> predicho</span>
           <span className="leg"><span className="dot red" /> zona alerta</span>
+          <span className="leg"><span className="dot gray" /> ruta directa</span>
         </div>
       </div>
 

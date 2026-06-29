@@ -222,3 +222,4 @@ body.light .push-time { color: #b91c1c; }
 .scn th, .scn td { text-align: center; padding: 3px 4px; border-bottom: 1px solid var(--border); }
 .scn th { color: var(--muted); font-weight: 600; }
 .scn td { color: var(--text); font-variant-numeric: tabular-nums; }
+.dot.gray { background: #94a3b8; }
