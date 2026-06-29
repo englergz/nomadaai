@@ -52,6 +52,7 @@ Toda la documentación está en `app/docs/` (citación IEEE).
 | [docs/METODOLOGIA.md](docs/METODOLOGIA.md) | Paradigma, 4 objetivos específicos, fases, datos y variables, evaluación, uso por terminal |
 | [docs/MODELO_PREDICCION.md](docs/MODELO_PREDICCION.md) | OE1 — predicción de destino: caracterización, método KNN+rumbo, ablation, métrica FDE, resultados |
 | [docs/MODELO_RIESGO.md](docs/MODELO_RIESGO.md) | OE2 — Índice de Riesgo Urbano (RTM): factores F1–F8, fórmula, pesos, sensibilidad, ética |
+| [docs/CUMPLIMIENTO.md](docs/CUMPLIMIENTO.md) | Autoevaluación crítica: cumplimiento de cada objetivo/indicador, vacíos y qué pulir |
 | [docs/PARA_COWORK.md](docs/PARA_COWORK.md) | Estado, resultados, límites y supuestos para la redacción de la tesis |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Arquitectura, stack, contrato de API, modelo de datos |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Despliegue (Hugging Face Space + Supabase) |
