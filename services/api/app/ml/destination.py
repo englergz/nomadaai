@@ -257,6 +257,19 @@ class DestinationPredictor:
             if ref and pred_coords:
                 fde_m = round(_haversine_m(pred_coords[-1], ref), 1)
 
+        # BASELINE ingenuo: extrapolar el último tramo del prefijo en LÍNEA RECTA al mismo
+        # horizonte. Permite demostrar cuánto aporta el modelo frente a "seguir derecho".
+        baseline_fde_m = None
+        if horizon_m and truth_ll and len(prefix_ll) >= 2:
+            a, b = prefix_ll[-2], prefix_ll[-1]
+            seg = _haversine_m(a, b)
+            if seg > 1e-6:
+                k = horizon_m / seg
+                naive = [b[0] + (b[0] - a[0]) * k, b[1] + (b[1] - a[1]) * k]
+                ref2 = _point_at_distance(truth_ll, horizon_m)
+                if ref2:
+                    baseline_fde_m = round(_haversine_m(naive, ref2), 1)
+
         return {
             "id": tid,
             "type": infer_type(tid),
@@ -273,6 +286,7 @@ class DestinationPredictor:
                 for c in cands
             ],
             "fde_m": fde_m,
+            "baseline_fde_m": baseline_fde_m,
             "horizon_m": horizon_m,
         }
 

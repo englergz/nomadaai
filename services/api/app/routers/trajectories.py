@@ -43,6 +43,7 @@ def evaluate(
 
     test_ids = sorted(predictor.test_ids)[:n]
     fdes: list[float] = []
+    base_fdes: list[float] = []
     by_type: dict[str, list[float]] = {}
     for tid in test_ids:
         d = predictor.get_demo(tid)
@@ -51,6 +52,8 @@ def evaluate(
         fde = float(d["fde_m"])
         fdes.append(fde)
         by_type.setdefault(d["type"], []).append(fde)
+        if d.get("baseline_fde_m") is not None:
+            base_fdes.append(float(d["baseline_fde_m"]))
 
     def summarize(vals: list[float]) -> dict:
         if not vals:
@@ -66,13 +69,21 @@ def evaluate(
             "acc_100m_pct": round(100 * sum(v <= 100 for v in vals) / len(vals), 1),
         }
 
+    overall = summarize(fdes)
+    baseline = summarize(base_fdes)
+    mejora = None
+    if overall.get("acc_50m_pct") and baseline.get("acc_50m_pct") is not None:
+        mejora = round(overall["acc_50m_pct"] - baseline["acc_50m_pct"], 1)
     result = {
         "n_train": predictor.n_train,
         "n_test": predictor.n_test,
         "evaluated": len(fdes),
-        "overall": summarize(fdes),
+        "overall": overall,
+        "baseline": baseline,            # extrapolación en línea recta (referencia)
+        "mejora_vs_baseline_pp": mejora,  # puntos porcentuales de mejora en acierto ≤50 m
         "by_type": {t: summarize(v) for t, v in sorted(by_type.items())},
-        "note": "FDE = error final contra el recorrido real al horizonte de continuación; conjunto NO visto.",
+        "note": "FDE = error final vs recorrido real al horizonte de continuación (no visto). "
+                "baseline = extrapolación en línea recta.",
     }
     _eval_cache[n] = result
     return result

@@ -125,6 +125,19 @@ export default function App() {
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { document.body.className = theme === "light" ? "light" : ""; }, [theme]);
   useEffect(() => { followRef.current = follow; }, [follow]);
+  // Histórico de efectividad: cargar el acumulado de sesiones anteriores
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem("nomadaai_live");
+      if (s) { const p = JSON.parse(s); liveRef.current = p; setLiveStats(p); }
+    } catch { /* ignore */ }
+  }, []);
+
+  function resetLive() {
+    liveRef.current = emptyBuckets();
+    setLiveStats(null);
+    try { localStorage.removeItem("nomadaai_live"); } catch { /* ignore */ }
+  }
 
   function pushLog(line: string) {
     setLog((prev) => [`${fmtClock(clockRef.current)} · ${line}`, ...prev].slice(0, 200));
@@ -252,7 +265,6 @@ export default function App() {
     if (vehMarkerRef.current) { vehMarkerRef.current.remove(); vehMarkerRef.current = null; }
     drawRef.current = {};
     setFinished(false); setNotifs([]); setLog([]); setLiveRisk(null); setSafeMsg("");
-    liveRef.current = emptyBuckets(); setLiveStats(null);
     setProgress(0); setPredInfo("—"); lastCellRef.current = ""; distRef.current = 0;
     setDrawMsg("Haz clic en el mapa: 1) dónde estás, 2) a dónde vas.");
   }
@@ -371,7 +383,9 @@ export default function App() {
           const fde = haversine(predEnd, realAhead);
           const L = excludeRef.current ? liveRef.current.test : liveRef.current.draw;
           L.n += 1; L.fde += fde; if (fde <= 50) L.h50 += 1; if (fde <= 100) L.h100 += 1;
-          setLiveStats({ test: { ...liveRef.current.test }, draw: { ...liveRef.current.draw } });
+          const snap = { test: { ...liveRef.current.test }, draw: { ...liveRef.current.draw } };
+          setLiveStats(snap);
+          try { localStorage.setItem("nomadaai_live", JSON.stringify(snap)); } catch { /* ignore */ }
           pushLog(`   efectividad: error ${fde.toFixed(0)} m (${excludeRef.current ? "no visto" : "ruta nueva"}, acum ${L.n})`);
         }
         const a = res.alert;
@@ -442,9 +456,15 @@ export default function App() {
         </button>
         {evalRes && (
           <div className="evalcard">
+            <button className="eval-close" onClick={() => setEvalRes(null)} title="Ocultar">✕</button>
             <div className="evalsub">Predicción de destino (test no visto)</div>
             <div className="evalbig">{evalRes.overall.acc_50m_pct}% <span>acierto ≤50 m</span></div>
             <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b> · {evalRes.evaluated} viajes</div>
+            {evalRes.baseline?.acc_50m_pct != null && (
+              <div className="evalrow" style={{ color: "#86efac" }}>
+                vs. línea recta: {evalRes.baseline.acc_50m_pct}% (<b>+{evalRes.mejora_vs_baseline_pp} pp</b> de mejora; error {evalRes.baseline.fde_median_m} m)
+              </div>
+            )}
             {Object.entries(evalRes.by_type).map(([t, v]: any) => (
               <div className="evalrow" key={t}>{labelForType(t)}: {v.acc_50m_pct}% ≤50 m (n={v.n})</div>
             ))}
@@ -530,7 +550,7 @@ export default function App() {
 
         {liveStats && (liveStats.test.n > 0 || liveStats.draw.n > 0) && (
           <div className="livecard">
-            <div className="livecard-h">Efectividad en vivo · comparativa (esta sesión)</div>
+            <div className="livecard-h">Histórico de efectividad · No visto vs Ruta nueva</div>
             <table className="scn">
               <thead><tr><th></th><th>No visto</th><th>Ruta nueva</th></tr></thead>
               <tbody>
@@ -546,7 +566,7 @@ export default function App() {
                   <td>{liveStats.test.alerts || "—"}</td><td>{liveStats.draw.alerts || "—"}</td></tr>
               </tbody>
             </table>
-            <div className="livecard-row" style={{ marginTop: 4 }}>Corre viajes <b>no vistos</b> y <b>rutas nuevas</b> para comparar la generalización.</div>
+            <div className="livecard-row" style={{ marginTop: 4 }}>Acumula entre sesiones (se guarda en este navegador). <a className="reset-link" onClick={resetLive}>Reiniciar histórico</a></div>
           </div>
         )}
 
