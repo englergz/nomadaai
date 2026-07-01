@@ -328,12 +328,17 @@ class DestinationPredictor:
         }
 
     def _markov_endpoint_m(self, prefix_m, horizon_m: float) -> tuple[float, float] | None:
-        """Predice el punto final siguiendo, desde la última celda, la transición más
-        probable aprendida en TRAIN, hasta cubrir `horizon_m` metros. Devuelve (x, y) en 3857.
+        """Predice el punto final con una cadena de Markov **direccional**: desde la celda actual
+        elige la transición aprendida (TRAIN) que combina alta probabilidad y coherencia con el
+        rumbo actual, hasta cubrir `horizon_m` metros. Devuelve (x, y) en 3857.
+
+        El sesgo por rumbo evita que en cruces se vaya al destino globalmente más común (que dejaría
+        el baseline artificialmente malo): es una comparación **justa** para el modelo.
         """
         if not self._trans or not horizon_m or horizon_m <= 0:
             return None
         px, py = prefix_m[-1][0], prefix_m[-1][1]
+        hdg = heading(prefix_m[-2][:2], prefix_m[-1][:2]) if len(prefix_m) >= 2 else 0.0
         cur = _cell(px, py)
         acc = 0.0
         visited = {cur}
@@ -341,24 +346,29 @@ class DestinationPredictor:
             nxts = self._trans.get(cur)
             if not nxts:
                 break
-            nxt = None
-            for c, _cnt in sorted(nxts.items(), key=lambda kv: -kv[1]):
-                if c not in visited:  # evita ciclos triviales
-                    nxt = c
-                    break
-            if nxt is None:
+            total = sum(nxts.values()) or 1
+            best, best_score = None, -1.0
+            for c, cnt in nxts.items():
+                if c in visited:
+                    continue
+                cx, cy = _cell_centroid(c)
+                if math.hypot(cx - px, cy - py) < 1e-6:
+                    continue
+                align = 1.0 - angle_diff(hdg, heading((px, py), (cx, cy))) / math.pi  # 1=mismo rumbo
+                score = (cnt / total) * (0.2 + 0.8 * align)
+                if score > best_score:
+                    best, best_score = c, score
+            if best is None:
                 break
-            cx, cy = _cell_centroid(nxt)
+            cx, cy = _cell_centroid(best)
             step = math.hypot(cx - px, cy - py)
-            if step <= 1e-6:
-                visited.add(nxt); cur = nxt
-                continue
             if acc + step >= horizon_m:
                 f = (horizon_m - acc) / step
                 return (px + (cx - px) * f, py + (cy - py) * f)
             acc += step
+            hdg = heading((px, py), (cx, cy))
             px, py = cx, cy
-            visited.add(nxt); cur = nxt
+            visited.add(best); cur = best
         return (px, py) if acc > 0 else None
 
     # --- interno ---

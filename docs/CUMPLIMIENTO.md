@@ -15,7 +15,7 @@
 | **OE3** | Sistema de **recomendación de rutas seguras** (minimiza exposición), **~69%** + tiempo real | ✅ **Cumplido** | **Alerta anticipada** (88.7%) + ruteo **direccional, por tipo y ponderado por riesgo**: `/route/build` calcula el **desvío que minimiza la exposición** y lo compara con la ruta directa (`risk_weight` = λ). |
 | OE3 | Panel con **≥3 capas** (riesgo, POIs, rutas) | 🟡 | Tiene riesgo + ruta + recorrido + corredores (≥3). **Falta la capa de POIs** (puntos de interés, F5 pendiente). |
 | **OE4** | Evaluación en **≥5 escenarios**, cuali+cuanti | ✅/🟡 | **45 escenarios** (hora×umbral×look-ahead) cuantitativos + efectividad de alerta. Cuantitativo cubierto; falta el componente cualitativo. |
-| OE4 | **Mejora de percepción de seguridad ≥30%** | 🟡 **Proxy disponible** | El estudio de percepción (encuesta) no aplica con datos simulados. **Proxy cuantitativo ya implementado:** *% de reducción de exposición al riesgo de la ruta segura vs. la directa* (`/route/build` → `comparison.exposure_reduction_pct`). Falta correrlo sistemáticamente sobre varios O-D y reportarlo. |
+| OE4 | **Mejora de percepción de seguridad ≥30%** | 🟡 **Proxy en vivo** | El estudio de percepción (encuesta) no aplica con datos simulados. **Proxy cuantitativo implementado y ya agregado en vivo:** *% de reducción de exposición de la ruta segura vs. la directa*, promediado sobre todas las rutas reales generadas (`/history/summary` → `proteccion.exposure_reduction_avg_pct`; se ve en "Protección en rutas reales"). Falta un **barrido sistemático O-D** documentado para el informe. |
 | OE4 | Sistema optimizado, **95% funcionalidad sin errores críticos** | 🟡 | App desplegada y operativa (HF Space); falta un **informe de QA** formal (cobertura de pruebas, tasa de errores). |
 
 ## Lo que está sólido (fortalezas)
@@ -49,6 +49,30 @@
 - Añadir capa de **POIs** al mapa (cumple el indicador de "≥3 capas con puntos de interés").
 - Informe de **QA/errores** para el indicador de 95% de funcionalidad.
 - Extender la **malla de riesgo** a todo el casco (reproyección de la red).
+
+## Ruta a 100% (checklist para cerrar la tesis)
+
+> Lo que falta para poder marcar cada indicador como ✅ y pasar a **documentar**. Ordenado por impacto.
+
+- [ ] **OE2 — validación del riesgo.** Gestionar microdato DIJIN (oficio). Sin él: declarar el riesgo
+      como **índice teórico-fundamentado** + reportar el **análisis de sensibilidad de pesos** como
+      "validación de la calibración" (no como precisión 85%). *(Es el vacío #1.)*
+- [ ] **OE4 — barrido O-D del proxy.** Correr la ruta segura vs. directa sobre un conjunto fijo de
+      ~30–50 pares origen-destino y reportar la **reducción media de exposición** (el motor ya la
+      calcula; falta el script batch y la tabla). Cierra el indicador de "≥30%".
+- [ ] **OE3 — capa de POIs.** Añadir una capa de puntos de interés al mapa para cumplir "≥3 capas
+      con POIs" de forma literal.
+- [ ] **OE1 — informe de caracterización.** Redactar en la tesis (TrajCL/TRACLUS/Fréchet ya hechos).
+- [ ] **OE4 — informe de QA.** Cobertura de pruebas + tasa de errores para el "95% de funcionalidad".
+- [ ] **Componente cualitativo de OE4.** Declararlo como trabajo futuro o mini-encuesta de usabilidad.
+
+### Sobre "¿el modelo aprende con el uso?" (aclaración honesta)
+
+El indicador de OE1 es **precisión >85%**, y está **cumplido (90%)**. El modelo es de **recuperación
+incremental**: no reentrena, pero su base de conocimiento **crece con cada trayectoria observada**
+(añadir un viaje = más cobertura). En el **producto** (app real) cada viaje de la comunidad lo mejora;
+en la **demo** los datos son simulados (SUMO), así que ese "aprendizaje con el uso" es una capacidad
+del producto, no un indicador de la tesis. Declararlo así es correcto y no infla resultados.
 
 ## Veredicto
 

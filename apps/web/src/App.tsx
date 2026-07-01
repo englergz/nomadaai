@@ -174,6 +174,7 @@ export default function App() {
   const [evalAlerts, setEvalAlerts] = useState<any>(null);
   const [evalScn, setEvalScn] = useState<any[] | null>(null);
   const [evalLoading, setEvalLoading] = useState(false);
+  const [busy, setBusy] = useState("");  // aviso mientras se prepara la simulación
 
   const selectedTrip = trips.find((t) => t.id === tripId);
   const vehType = mode === "draw" ? (drawVeh || "car") : (selectedTrip?.type ?? "car");
@@ -445,19 +446,22 @@ export default function App() {
 
   async function startTest() {
     if (!tripId) return;
+    setBusy("Cargando el recorrido del viaje…");
     let coords: [number, number][] = [];
     try {
       const t = await fetch(`${base()}/trajectories/${encodeURIComponent(tripId)}/track`).then((r) => r.json());
       coords = t.coords;
-    } catch (e) { alert("No pude cargar el recorrido: " + (e as Error).message); return; }
+    } catch (e) { setBusy(""); alert("No pude cargar el recorrido: " + (e as Error).message); return; }
     excludeRef.current = tripId; typeRef.current = selectedTrip?.type ?? "car";
     protectionRef.current = null;  // en 'no visto' no hay ruta segura vs directa
+    setBusy("");
     startStream(coords);
   }
 
   async function startDraw() {
     const d = drawRef.current;
     if (!d.origin || !d.dest) { setDrawMsg("Marca primero origen y destino en el mapa."); return; }
+    setBusy("Generando la ruta segura sobre la red vial…");
     setDrawMsg("Generando ruta segura sobre la red vial…");
     let coords: [number, number][] = [];
     try {
@@ -466,7 +470,7 @@ export default function App() {
         body: JSON.stringify({ origin: d.origin, dest: d.dest, type: drawVeh || null,
           hour, risk_weight: riskWeight / 20 }),  // λ ∈ [0,5]
       });
-      if (!r.ok) { setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
+      if (!r.ok) { setBusy(""); setDrawMsg("No se pudo trazar la ruta (puntos lejos de la red)."); return; }
       const j = await r.json();
       coords = j.coords;
       const map = mapRef.current;
@@ -486,8 +490,9 @@ export default function App() {
       const adapted = j.vehicle_restricted ? `adaptada a ${labelForType(drawVeh || "car")}` : "red general";
       const dir = j.directional ? "respeta sentidos" : "sin sentido estricto";
       setDrawMsg(`Ruta ${(j.distance_m / 1000).toFixed(2)} km · ${adapted} · ${dir}. Simulando…`);
-    } catch (e) { setDrawMsg("Error: " + (e as Error).message); return; }
+    } catch (e) { setBusy(""); setDrawMsg("Error: " + (e as Error).message); return; }
     excludeRef.current = null; typeRef.current = drawVeh || "car";
+    setBusy("");
     startStream(coords);
   }
 
@@ -696,13 +701,14 @@ export default function App() {
         {!running ? (
           <div className="row">
             {mode === "test"
-              ? <button onClick={startTest} disabled={!tripId}>▶ Iniciar simulación</button>
-              : <button onClick={startDraw}>▶ Generar ruta y simular</button>}
-            <button className="secondary" onClick={clearAll}>Limpiar</button>
+              ? <button onClick={startTest} disabled={!tripId || !!busy}>{busy ? "⏳ " + busy : "▶ Iniciar simulación"}</button>
+              : <button onClick={startDraw} disabled={!!busy}>{busy ? "⏳ " + busy : "▶ Generar ruta y simular"}</button>}
+            <button className="secondary" onClick={clearAll} disabled={!!busy}>Limpiar</button>
           </div>
         ) : (
           <button className="secondary" onClick={stopSim}>■ Detener</button>
         )}
+        {busy && <div className="status">⏳ {busy}</div>}
 
         {(running || finished) && <div className="clock">🕒 {fmtClock(clock)} · {timeScale === 1 ? "tiempo real" : `×${timeScale}`}</div>}
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
