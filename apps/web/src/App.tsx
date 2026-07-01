@@ -169,6 +169,7 @@ export default function App() {
   );
   const [sat, setSat] = useState(false);
   const [riskOn, setRiskOn] = useState(true);
+  const [poisOn, setPoisOn] = useState(false);
   const [follow, setFollow] = useState(true);
   const [evalRes, setEvalRes] = useState<any>(null);
   const [evalAlerts, setEvalAlerts] = useState<any>(null);
@@ -309,6 +310,11 @@ export default function App() {
       map.setLayoutProperty("risk-line", "visibility", v);
     } catch (e) { console.error(e); }
   }
+  function togglePois(next: boolean) {
+    setPoisOn(next);
+    const map = mapRef.current; if (!map || !map.getLayer("pois")) return;
+    try { map.setLayoutProperty("pois", "visibility", next ? "visible" : "none"); } catch (e) { console.error(e); }
+  }
 
   // init map
   useEffect(() => {
@@ -348,6 +354,30 @@ export default function App() {
       addPoint(map, "endpoints", { "circle-radius": 6, "circle-color": "#a855f7", "circle-stroke-color": "#fff", "circle-stroke-width": 2 });
       addPoint(map, "danger", { "circle-radius": 16, "circle-color": "#ef4444", "circle-opacity": 0.3, "circle-stroke-color": "#ef4444", "circle-stroke-width": 2.5 });
       loadRisk(map, hour);
+
+      // Capa de POIs (OE3): lugares de interés de OSM, coloreados por categoría. Oculta por defecto.
+      try {
+        const pois = await fetch(`${base()}/pois`).then((r) => r.json());
+        map.addSource("pois", { type: "geojson", data: pois });
+        map.addLayer({
+          id: "pois", type: "circle", source: "pois",
+          layout: { visibility: "none" },
+          paint: {
+            "circle-radius": 5,
+            "circle-stroke-width": 1.5, "circle-stroke-color": "#fff",
+            "circle-color": ["match", ["get", "category"],
+              "seguridad", "#2563eb", "salud", "#ef4444", "educación", "#a855f7",
+              "combustible", "#f97316", "banco", "#16a34a", "transporte", "#0ea5e9",
+              "comercio", "#b45309", "culto", "#64748b", "#94a3b8"],
+          },
+        } as never);
+        map.on("click", "pois", (e) => {
+          const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
+          if (!p) return;
+          new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat)
+            .setHTML(`<b>${p.name}</b><br/>${p.category}`).addTo(map);
+        });
+      } catch (e) { console.error("pois:", e); }
 
       map.on("click", "risk-fill", (e) => {
         const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
@@ -633,6 +663,7 @@ export default function App() {
         <button onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "☀️ Claro" : "🌙 Oscuro"}</button>
         <button onClick={() => toggleSat(!sat)}>{sat ? "🗺️ Plano" : "🛰️ Satelital"}</button>
         <button className={riskOn ? "on" : ""} onClick={() => toggleRisk(!riskOn)}>{riskOn ? "🟥 Riesgo: ON" : "⬜ Riesgo: OFF"}</button>
+        <button className={poisOn ? "on" : ""} onClick={() => togglePois(!poisOn)}>{poisOn ? "📍 Lugares: ON" : "📍 Lugares: OFF"}</button>
         <button className={follow ? "on" : ""} onClick={() => setFollow(!follow)}>{follow ? "🎯 Seguir: ON" : "🧭 Seguir: OFF"}</button>
         <button className="help-btn" onClick={() => setShowHelp(true)} title="¿Cómo funciona?">? Ayuda</button>
         {CLERK_ENABLED && <AuthBar onUser={setAuthUid} setGetToken={(fn) => { authGetTokenRef.current = fn; }} />}
