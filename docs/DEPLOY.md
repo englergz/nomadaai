@@ -96,6 +96,25 @@ persistencia en el Space define el secret **`DATABASE_URL`**:
 Sin este secret la app funciona igual, pero el histórico cae al navegador (no persiste entre
 dispositivos). Es **replicable a otra ciudad**: cambia la columna `city`.
 
+### Login opcional (Clerk)
+
+El inicio de sesión es **opcional**: sin configurar nada, la app funciona en **modo invitado**
+(identidad anónima por dispositivo). Al iniciar sesión, el histórico pasa a la **cuenta** del
+usuario (identidad verificada) y lo sigue entre dispositivos. Los datos siguen en Neon; Clerk solo
+gestiona identidades.
+
+1. Crea una aplicación en [clerk.com](https://clerk.com) (gratis). Habilita **Google** y **correo**.
+2. **Frontend (clave pública):** en el HF Space → *Settings → Variables* (variable normal, **no**
+   secret, la clave es pública), añade `VITE_CLERK_PUBLISHABLE_KEY` = `pk_...`. El Dockerfile la
+   inyecta en el build.
+3. **Backend (verificación):** añade la variable `CLERK_ISSUER` = el *Issuer / Frontend API* de tu
+   instancia Clerk (p. ej. `https://<slug>.clerk.accounts.dev`). El backend verifica los tokens
+   contra `${CLERK_ISSUER}/.well-known/jwks.json`.
+4. Reinicia el Space.
+
+En POST/DELETE la identidad la impone el **token verificado** (no el cliente), así nadie puede
+escribir el histórico de otro. Las lecturas usan ese id cuando hay sesión.
+
 ## 4. (Opcional) Auto-deploy desde GitHub
 
 Para que cada `git push` a GitHub actualice el Space, en los *Settings* del Space puedes

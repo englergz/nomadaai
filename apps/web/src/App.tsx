@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { SignedIn, SignedOut, SignInButton, UserButton, useAuth, useUser } from "@clerk/clerk-react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type {
@@ -72,6 +73,28 @@ const emptyHist = (): HistLocal => ({
   prot: { n: 0, redSum: 0 },
 });
 
+// Login opcional: activo solo si hay clave publicable de Clerk. Si no, todo es modo invitado.
+const CLERK_ENABLED = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+// Barra de sesión (usa hooks de Clerk; solo se monta cuando Clerk está habilitado).
+function AuthBar({ onUser, setGetToken }: {
+  onUser: (id: string | null) => void;
+  setGetToken: (fn: (() => Promise<string | null>) | null) => void;
+}) {
+  const { user, isSignedIn } = useUser();
+  const { getToken } = useAuth();
+  useEffect(() => { onUser(isSignedIn && user ? user.id : null); }, [isSignedIn, user, onUser]);
+  useEffect(() => { setGetToken(() => getToken()); return () => setGetToken(null); }, [getToken, setGetToken]);
+  return (
+    <>
+      <SignedOut>
+        <SignInButton mode="modal"><button className="help-btn">Iniciar sesión</button></SignInButton>
+      </SignedOut>
+      <SignedIn><UserButton afterSignOutUrl="/" /></SignedIn>
+    </>
+  );
+}
+
 // Identidad anónima del usuario (persistente en este navegador). Habilita histórico por usuario,
 // personalización y BI. Más adelante se puede enlazar a un login real sin cambiar el esquema.
 function getUid(): string {
@@ -129,6 +152,9 @@ export default function App() {
   const tripMetaRef = useRef<{ mode: string; vehicle: string; hour: number }>({ mode: "test", vehicle: "car", hour: 20 });
   const uidRef = useRef<string>(getUid());
   const sessionRef = useRef<string>(`s_${Date.now()}`);
+  const [authUid, setAuthUid] = useState<string | null>(null);          // id de Clerk si hay sesión
+  const authGetTokenRef = useRef<null | (() => Promise<string | null>)>(null);
+  const effUidRef = useRef<string>(uidRef.current);                     // usuario efectivo (sesión o anónimo)
   const histLocalRef = useRef<HistLocal>(emptyHist());
   const [histLocal, setHistLocal] = useState<HistLocal | null>(null);   // respaldo (navegador)
   const [histSummary, setHistSummary] = useState<any>(null);            // agregados del usuario (DB)
@@ -176,11 +202,26 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cuando cambia la sesión (login/logout) se recalcula el usuario efectivo y se recarga.
+  useEffect(() => {
+    effUidRef.current = authUid ?? uidRef.current;
+    refreshSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authUid]);
+
+  async function authHeader(): Promise<Record<string, string>> {
+    try {
+      const t = authGetTokenRef.current ? await authGetTokenRef.current() : null;
+      return t ? { Authorization: `Bearer ${t}` } : {};
+    } catch { return {}; }
+  }
+
   async function refreshSummary() {
     try {
+      const h = await authHeader();
       const [mine, global] = await Promise.all([
-        fetch(`${base()}/history/summary?user_id=${encodeURIComponent(uidRef.current)}`).then((r) => r.json()),
-        fetch(`${base()}/history/summary`).then((r) => r.json()),
+        fetch(`${base()}/history/summary?user_id=${encodeURIComponent(effUidRef.current)}`, { headers: h }).then((r) => r.json()),
+        fetch(`${base()}/history/summary`).then((r) => r.json()),  // sin sesión → contexto global
       ]);
       setHistSummary(mine?.available ? mine : null);
       setHistGlobal(global?.available ? global : null);
@@ -207,9 +248,9 @@ export default function App() {
     const m = tripMetaRef.current;
     try {
       await fetch(`${base()}/history/trip`, {
-        method: "POST", headers: { "content-type": "application/json" },
+        method: "POST", headers: { "content-type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({
-          user_id: uidRef.current, session_id: sessionRef.current,
+          user_id: effUidRef.current, session_id: sessionRef.current,
           mode: m.mode, vehicle: m.vehicle, hour: m.hour,
           n_pred: a.n, model_err_sum: a.modelErr, base_err_sum: a.baseErr,
           model_hit50: a.modelHit50, base_hit50: a.baseHit50, alerts: a.alerts,
@@ -226,7 +267,7 @@ export default function App() {
     histLocalRef.current = emptyHist();
     setHistLocal(null);
     try { localStorage.removeItem("nomadaai_hist"); } catch { /* ignore */ }
-    try { await fetch(`${base()}/history?user_id=${encodeURIComponent(uidRef.current)}`, { method: "DELETE" }); } catch { /* ignore */ }
+    try { await fetch(`${base()}/history?user_id=${encodeURIComponent(effUidRef.current)}`, { method: "DELETE", headers: await authHeader() }); } catch { /* ignore */ }
     refreshSummary();
   }
 
@@ -589,6 +630,7 @@ export default function App() {
         <button className={riskOn ? "on" : ""} onClick={() => toggleRisk(!riskOn)}>{riskOn ? "🟥 Riesgo: ON" : "⬜ Riesgo: OFF"}</button>
         <button className={follow ? "on" : ""} onClick={() => setFollow(!follow)}>{follow ? "🎯 Seguir: ON" : "🧭 Seguir: OFF"}</button>
         <button className="help-btn" onClick={() => setShowHelp(true)} title="¿Cómo funciona?">? Ayuda</button>
+        {CLERK_ENABLED && <AuthBar onUser={setAuthUid} setGetToken={(fn) => { authGetTokenRef.current = fn; }} />}
       </div>
 
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
@@ -673,7 +715,7 @@ export default function App() {
             <>
             <h2 className="step">2 · Tu protección</h2>
             <div className="livecard">
-              <div className="livecard-h">Lo que NómadaAI hizo por ti · anónimo, sin registro</div>
+              <div className="livecard-h">Lo que NómadaAI hizo por ti · {authUid ? "en tu cuenta" : "anónimo, sin registro"}</div>
 
               {!hv && (
                 <div className="evalrow" style={{ color: "var(--muted)" }}>Aún no tienes viajes. Corre una simulación para ver cómo te protege.</div>
@@ -876,9 +918,10 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
         <ul>
           <li><b>¿El modelo “aprende” mientras lo uso?</b> No: predice por <b>analogía</b> con viajes
             pasados parecidos. Es estable y auditable a propósito; lo que crece con el uso es el histórico.</li>
-          <li><b>¿Tengo que iniciar sesión?</b> No. Funciona <b>sin registro</b>: se te asigna un
-            identificador anónimo en este navegador para separar tu histórico del de otros. Si más
-            adelante se añade login, será opcional y no cambia nada de esto.</li>
+          <li><b>¿Tengo que iniciar sesión?</b> No. Funciona <b>sin registro</b> (invitado): se te
+            asigna un identificador anónimo en este navegador. Si <b>inicias sesión</b> (opcional,
+            con Google o correo), tu protección se guarda en <b>tu cuenta</b> y te sigue entre
+            dispositivos.</li>
           <li><b>¿Sirve para otra ciudad?</b> Sí. La lógica es la misma; basta cambiar los datos
             (trayectorias y riesgo) de la nueva ciudad. Está pensado para ser <b>replicable</b>.</li>
           <li><b>¿Esto es la app final?</b> Es el prototipo de la tesis; la base para un producto posterior.</li>

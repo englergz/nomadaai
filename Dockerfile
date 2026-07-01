@@ -12,6 +12,10 @@ COPY apps ./apps
 RUN npm ci
 # Cadena vacía => el cliente llama a la API en el mismo origen (rutas relativas).
 ENV VITE_API_URL=""
+# Clave publicable de Clerk (PÚBLICA, se inyecta en el bundle). En HF Spaces se pasa como
+# Variable del Space; si está vacía, la app queda en modo invitado (sin login).
+ARG VITE_CLERK_PUBLISHABLE_KEY=""
+ENV VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
 RUN npm run build:web
 
 # --- Etapa 2: runtime Python (API + estáticos) ---

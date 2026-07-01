@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # --- Base de datos (opcional en esta fase) ---
     database_url: str | None = None
 
+    # --- Autenticación Clerk (opcional). Si `clerk_issuer` está vacío, la app funciona
+    # solo en modo invitado (anónimo). Con él, se verifican los tokens de sesión. ---
+    clerk_issuer: str | None = None
+
     @property
     def research_path(self) -> Path:
         return Path(self.research_dir)

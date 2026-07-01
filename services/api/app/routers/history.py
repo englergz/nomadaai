@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from pydantic import BaseModel
 
+from app.core.auth import verify_bearer
 from app.data import history
 
 router = APIRouter(prefix="/history", tags=["history"])
@@ -37,17 +38,26 @@ class TripRecord(BaseModel):
 
 
 @router.post("/trip")
-def log_trip(rec: TripRecord) -> dict:
+def log_trip(rec: TripRecord, authorization: Optional[str] = Header(None)) -> dict:
     try:
-        return history.log_trip(rec.model_dump())
+        data = rec.model_dump()
+        sub = verify_bearer(authorization)
+        if sub:  # usuario autenticado: la identidad la manda el token, no el cliente
+            data["user_id"] = sub
+        return history.log_trip(data)
     except Exception as e:  # noqa: BLE001 — nunca romper la simulación por la DB
         return {"ok": False, "error": str(e)}
 
 
 @router.get("/summary")
-def get_summary(city: str = "tumaco", user_id: Optional[str] = None) -> dict:
+def get_summary(
+    city: str = "tumaco",
+    user_id: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+) -> dict:
     try:
-        return history.summary(city, user_id)
+        sub = verify_bearer(authorization)
+        return history.summary(city, sub or user_id)
     except Exception as e:  # noqa: BLE001
         return {"available": False, "error": str(e)}
 
@@ -61,8 +71,13 @@ def get_stats(city: str = "tumaco") -> dict:
 
 
 @router.delete("")
-def reset(city: str = "tumaco", user_id: Optional[str] = None) -> dict:
+def reset(
+    city: str = "tumaco",
+    user_id: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
+) -> dict:
     try:
-        return history.reset(city, user_id)
+        sub = verify_bearer(authorization)
+        return history.reset(city, sub or user_id)
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "error": str(e)}
