@@ -636,7 +636,7 @@ export default function App() {
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
 
       <div className="panel">
-        <h1>NómadaAI</h1>
+        <h1>Nómada.AI</h1>
         <p className="subtitle">Navegación consciente del riesgo · Tumaco</p>
         <p className="panel-lead">Predice a dónde vas y te avisa de las zonas de riesgo <b>antes</b> de llegar,
           proponiendo la ruta que menos te expone. Aquí lo pruebas sobre Tumaco.</p>
@@ -715,7 +715,7 @@ export default function App() {
             <>
             <h2 className="step">2 · Tu protección</h2>
             <div className="livecard">
-              <div className="livecard-h">Lo que NómadaAI hizo por ti · {authUid ? "en tu cuenta" : "anónimo, sin registro"}</div>
+              <div className="livecard-h">Lo que Nómada.AI hizo por ti · {authUid ? "en tu cuenta" : "anónimo, sin registro"}</div>
 
               {!hv && (
                 <div className="evalrow" style={{ color: "var(--muted)" }}>Aún no tienes viajes. Corre una simulación para ver cómo te protege.</div>
@@ -760,15 +760,15 @@ export default function App() {
           );
         })()}
 
-        <h2 className="step">3 · Validar el modelo (tesis)</h2>
-        <p className="counts-cap">Prueba objetiva sobre viajes que el modelo nunca vio.</p>
+        <h2 className="step">3 · Rendimiento del sistema</h2>
+        <p className="counts-cap">Qué tan bien predice (en viajes no vistos) y cuánto protege (en rutas reales).</p>
         <button className="eval-btn" onClick={runEval} disabled={evalLoading}>
-          {evalLoading ? "Midiendo…" : "📊 Medir efectividad"}
+          {evalLoading ? "Midiendo…" : "📊 Medir rendimiento"}
         </button>
         {evalRes && (
           <div className="evalcard">
             <button className="eval-close" onClick={() => setEvalRes(null)} title="Ocultar">✕</button>
-            <div className="evalsub">Predicción de destino (test no visto)</div>
+            <div className="evalsub">Predicción de destino (viajes no vistos)</div>
             <div className="evalbig">{evalRes.overall.acc_50m_pct}% <span>acierto ≤50 m</span></div>
             <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b> · {evalRes.evaluated} viajes</div>
             {evalRes.baseline?.acc_50m_pct != null && (
@@ -787,9 +787,17 @@ export default function App() {
 
             {evalAlerts && (
               <>
-                <div className="evalsub">Alerta a tiempo (OE4)</div>
+                <div className="evalsub">Alerta a tiempo</div>
                 <div className="evalbig">{evalAlerts.pct_anticipadas}% <span>avisos ANTES de la zona</span></div>
                 <div className="evalrow">{evalAlerts.pct_con_alerta}% de viajes con alerta · anticipación media <b>{evalAlerts.anticipacion_media_m} m</b> (~{evalAlerts.anticipacion_media_s} s)</div>
+              </>
+            )}
+
+            {histGlobal?.proteccion && (
+              <>
+                <div className="evalsub">Protección en rutas reales</div>
+                <div className="evalbig">−{histGlobal.proteccion.exposure_reduction_avg_pct}% <span>de exposición al riesgo</span></div>
+                <div className="evalrow">promedio sobre {histGlobal.proteccion.n} {histGlobal.proteccion.n === 1 ? "ruta generada" : "rutas generadas"} por los usuarios · {histGlobal.trips} viajes en total</div>
               </>
             )}
 
@@ -832,7 +840,7 @@ export default function App() {
       <div className="phone">
         <div className="phone-notch" />
         <div className="phone-screen">
-          <div className="phone-status">{running || finished ? fmtClock(clock) : `${String(hour).padStart(2, "0")}:00`} · NómadaAI</div>
+          <div className="phone-status">{running || finished ? fmtClock(clock) : `${String(hour).padStart(2, "0")}:00`} · Nómada.AI</div>
           <div className="phone-veh">{vehIcon}</div>
           <div className="phone-sub">{running ? "Navegando…" : finished ? "Finalizado" : "En espera"}</div>
           {liveRisk != null && (
@@ -858,9 +866,9 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
     <div className="help-overlay" onClick={onClose}>
       <div className="help-modal" onClick={(e) => e.stopPropagation()}>
         <button className="help-x" onClick={onClose} title="Cerrar">✕</button>
-        <h2>¿Cómo funciona NómadaAI?</h2>
+        <h2>¿Cómo funciona Nómada.AI?</h2>
         <p className="help-lead">
-          NómadaAI predice <b>a dónde vas</b> mientras te mueves y te <b>avisa de las zonas de riesgo
+          Nómada.AI predice <b>a dónde vas</b> mientras te mueves y te <b>avisa de las zonas de riesgo
           antes de llegar</b>, proponiendo la ruta que menos te expone. Aquí lo simulamos sobre Tumaco.
         </p>
 
@@ -924,7 +932,8 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
             dispositivos.</li>
           <li><b>¿Sirve para otra ciudad?</b> Sí. La lógica es la misma; basta cambiar los datos
             (trayectorias y riesgo) de la nueva ciudad. Está pensado para ser <b>replicable</b>.</li>
-          <li><b>¿Esto es la app final?</b> Es el prototipo de la tesis; la base para un producto posterior.</li>
+          <li><b>¿Esto es la app final?</b> Es la versión web de demostración. La app se llevará a
+            <b>Android e iOS</b> reutilizando el mismo motor (predicción + riesgo + rutas seguras).</li>
         </ul>
       </div>
     </div>
