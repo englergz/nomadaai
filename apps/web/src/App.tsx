@@ -595,57 +595,21 @@ export default function App() {
       <div className="panel">
         <h1>NómadaAI</h1>
         <p className="subtitle">Navegación consciente del riesgo · Tumaco</p>
+        <p className="panel-lead">Predice a dónde vas y te avisa de las zonas de riesgo <b>antes</b> de llegar,
+          proponiendo la ruta que menos te expone. Aquí lo pruebas sobre Tumaco.</p>
 
         {health && (
-          <div className="counts">
-            <div><b>{(health.n_trajectories ?? 0).toLocaleString()}</b><span>total</span></div>
-            <div><b>{(health.n_train ?? 0).toLocaleString()}</b><span>entrenamiento</span></div>
-            <div><b>{(health.n_test ?? 0).toLocaleString()}</b><span>no vistas</span></div>
-          </div>
+          <>
+            <div className="counts">
+              <div><b>{(health.n_trajectories ?? 0).toLocaleString()}</b><span>trayectorias</span></div>
+              <div><b>{(health.n_train ?? 0).toLocaleString()}</b><span>entrenan el modelo</span></div>
+              <div><b>{(health.n_test ?? 0).toLocaleString()}</b><span>prueba (no vistas)</span></div>
+            </div>
+            <p className="counts-cap">Datos: simulación de tráfico de Tumaco (SUMO).</p>
+          </>
         )}
 
-        <button className="eval-btn" onClick={runEval} disabled={evalLoading}>
-          {evalLoading ? "Midiendo…" : "📊 Medir efectividad"}
-        </button>
-        {evalRes && (
-          <div className="evalcard">
-            <button className="eval-close" onClick={() => setEvalRes(null)} title="Ocultar">✕</button>
-            <div className="evalsub">Predicción de destino (test no visto)</div>
-            <div className="evalbig">{evalRes.overall.acc_50m_pct}% <span>acierto ≤50 m</span></div>
-            <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b> · {evalRes.evaluated} viajes</div>
-            {evalRes.baseline?.acc_50m_pct != null && (
-              <div className="evalrow" style={{ color: "#86efac" }}>
-                vs. línea recta: {evalRes.baseline.acc_50m_pct}% (<b>+{evalRes.mejora_vs_baseline_pp} pp</b> de mejora; error {evalRes.baseline.fde_median_m} m)
-              </div>
-            )}
-            {Object.entries(evalRes.by_type).map(([t, v]: any) => (
-              <div className="evalrow" key={t}>{labelForType(t)}: {v.acc_50m_pct}% ≤50 m (n={v.n})</div>
-            ))}
-
-            {evalAlerts && (
-              <>
-                <div className="evalsub">Protección — la alerta avisa a tiempo (OE4)</div>
-                <div className="evalbig">{evalAlerts.pct_anticipadas}% <span>avisos ANTES de la zona</span></div>
-                <div className="evalrow">{evalAlerts.pct_con_alerta}% de viajes con alerta · anticipación media <b>{evalAlerts.anticipacion_media_m} m</b> (~{evalAlerts.anticipacion_media_s} s)</div>
-              </>
-            )}
-
-            {evalScn && evalScn.length > 0 && (
-              <>
-                <div className="evalsub">Escenarios (look-ahead 300 m)</div>
-                <table className="scn">
-                  <thead><tr><th>Hora</th><th>Umbral</th><th>% riesgo</th><th>% a tiempo</th></tr></thead>
-                  <tbody>
-                    {evalScn.map((s, i) => (
-                      <tr key={i}><td>{String(s.hora).padStart(2, "0")}:00</td><td>{s.umbral}</td><td>{s.pct_con_riesgo}%</td><td>{s.pct_anticipadas}%</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            )}
-          </div>
-        )}
-
+        <h2 className="step">1 · Simular un viaje</h2>
         <div className="tabs">
           <button className={mode === "test" ? "on" : ""} onClick={() => setMode("test")} disabled={running}>Viaje no visto</button>
           <button className={mode === "draw" ? "on" : ""} onClick={() => setMode("draw")} disabled={running}>Ruta nueva</button>
@@ -705,8 +669,10 @@ export default function App() {
           const hv = histView();
           if (!hv && !histGlobal) return null;
           return (
+            <>
+            <h2 className="step">2 · Tu efectividad</h2>
             <div className="livecard">
-              <div className="livecard-h">Tu histórico{hv ? ` · ${hv.trips} ${hv.trips === 1 ? "viaje" : "viajes"}` : ""}</div>
+              <div className="livecard-h">Se acumula automáticamente · anónimo, sin registro{hv ? ` · ${hv.trips} ${hv.trips === 1 ? "viaje" : "viajes"}` : ""}</div>
 
               {!hv && (
                 <div className="evalrow" style={{ color: "var(--muted)" }}>Aún no tienes viajes. Corre una simulación para empezar a medir tu efectividad.</div>
@@ -754,8 +720,59 @@ export default function App() {
                 </div>
               )}
             </div>
+            </>
           );
         })()}
+
+        <h2 className="step">3 · Validar el modelo (tesis)</h2>
+        <p className="counts-cap">Prueba objetiva sobre viajes que el modelo nunca vio.</p>
+        <button className="eval-btn" onClick={runEval} disabled={evalLoading}>
+          {evalLoading ? "Midiendo…" : "📊 Medir efectividad"}
+        </button>
+        {evalRes && (
+          <div className="evalcard">
+            <button className="eval-close" onClick={() => setEvalRes(null)} title="Ocultar">✕</button>
+            <div className="evalsub">Predicción de destino (test no visto)</div>
+            <div className="evalbig">{evalRes.overall.acc_50m_pct}% <span>acierto ≤50 m</span></div>
+            <div className="evalrow">≤100 m: <b>{evalRes.overall.acc_100m_pct}%</b> · error mediano: <b>{evalRes.overall.fde_median_m} m</b> · {evalRes.evaluated} viajes</div>
+            {evalRes.baseline?.acc_50m_pct != null && (
+              <div className="evalrow" style={{ color: "#86efac" }}>
+                vs. línea recta: {evalRes.baseline.acc_50m_pct}% (<b>+{evalRes.mejora_vs_baseline_pp} pp</b>; error {evalRes.baseline.fde_median_m} m)
+              </div>
+            )}
+            {evalRes.markov?.acc_50m_pct != null && (
+              <div className="evalrow" style={{ color: "#86efac" }}>
+                vs. Markov (que aprende): {evalRes.markov.acc_50m_pct}% (<b>+{evalRes.mejora_vs_markov_pp} pp</b>; error {evalRes.markov.fde_median_m} m)
+              </div>
+            )}
+            {Object.entries(evalRes.by_type).map(([t, v]: any) => (
+              <div className="evalrow" key={t}>{labelForType(t)}: {v.acc_50m_pct}% ≤50 m (n={v.n})</div>
+            ))}
+
+            {evalAlerts && (
+              <>
+                <div className="evalsub">Alerta a tiempo (OE4)</div>
+                <div className="evalbig">{evalAlerts.pct_anticipadas}% <span>avisos ANTES de la zona</span></div>
+                <div className="evalrow">{evalAlerts.pct_con_alerta}% de viajes con alerta · anticipación media <b>{evalAlerts.anticipacion_media_m} m</b> (~{evalAlerts.anticipacion_media_s} s)</div>
+              </>
+            )}
+
+            {evalScn && evalScn.length > 0 && (
+              <details className="scn-details">
+                <summary>Ver escenarios por hora y umbral ({evalScn.length})</summary>
+                <p className="counts-cap" style={{ marginTop: 6 }}>% de la ruta con riesgo y % de alertas a tiempo (look-ahead 300 m).</p>
+                <table className="scn">
+                  <thead><tr><th>Hora</th><th>Umbral</th><th>% riesgo</th><th>% a tiempo</th></tr></thead>
+                  <tbody>
+                    {evalScn.map((s, i) => (
+                      <tr key={i}><td>{String(s.hora).padStart(2, "0")}:00</td><td>{s.umbral}</td><td>{s.pct_con_riesgo}%</td><td>{s.pct_anticipadas}%</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            )}
+          </div>
+        )}
 
         <div className="legend">
           <span className="leg"><span className="dot blue" /> capturado</span>
@@ -865,6 +882,9 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
         <ul>
           <li><b>¿El modelo “aprende” mientras lo uso?</b> No: predice por <b>analogía</b> con viajes
             pasados parecidos. Es estable y auditable a propósito; lo que crece con el uso es el histórico.</li>
+          <li><b>¿Tengo que iniciar sesión?</b> No. Funciona <b>sin registro</b>: se te asigna un
+            identificador anónimo en este navegador para separar tu histórico del de otros. Si más
+            adelante se añade login, será opcional y no cambia nada de esto.</li>
           <li><b>¿Sirve para otra ciudad?</b> Sí. La lógica es la misma; basta cambiar los datos
             (trayectorias y riesgo) de la nueva ciudad. Está pensado para ser <b>replicable</b>.</li>
           <li><b>¿Esto es la app final?</b> Es el prototipo de la tesis; la base para un producto posterior.</li>

@@ -44,6 +44,7 @@ def evaluate(
     test_ids = sorted(predictor.test_ids)[:n]
     fdes: list[float] = []
     base_fdes: list[float] = []
+    markov_fdes: list[float] = []
     by_type: dict[str, list[float]] = {}
     for tid in test_ids:
         d = predictor.get_demo(tid)
@@ -54,6 +55,8 @@ def evaluate(
         by_type.setdefault(d["type"], []).append(fde)
         if d.get("baseline_fde_m") is not None:
             base_fdes.append(float(d["baseline_fde_m"]))
+        if d.get("markov_fde_m") is not None:
+            markov_fdes.append(float(d["markov_fde_m"]))
 
     def summarize(vals: list[float]) -> dict:
         if not vals:
@@ -71,19 +74,25 @@ def evaluate(
 
     overall = summarize(fdes)
     baseline = summarize(base_fdes)
-    mejora = None
-    if overall.get("acc_50m_pct") and baseline.get("acc_50m_pct") is not None:
-        mejora = round(overall["acc_50m_pct"] - baseline["acc_50m_pct"], 1)
+    markov = summarize(markov_fdes)
+
+    def _mejora(ref: dict) -> float | None:
+        if overall.get("acc_50m_pct") is not None and ref.get("acc_50m_pct") is not None:
+            return round(overall["acc_50m_pct"] - ref["acc_50m_pct"], 1)
+        return None
+
     result = {
         "n_train": predictor.n_train,
         "n_test": predictor.n_test,
         "evaluated": len(fdes),
         "overall": overall,
-        "baseline": baseline,            # extrapolación en línea recta (referencia)
-        "mejora_vs_baseline_pp": mejora,  # puntos porcentuales de mejora en acierto ≤50 m
+        "baseline": baseline,            # extrapolación en línea recta (referencia ingenua)
+        "markov": markov,                # cadena de Markov 1er orden (referencia que aprende)
+        "mejora_vs_baseline_pp": _mejora(baseline),
+        "mejora_vs_markov_pp": _mejora(markov),
         "by_type": {t: summarize(v) for t, v in sorted(by_type.items())},
         "note": "FDE = error final vs recorrido real al horizonte de continuación (no visto). "
-                "baseline = extrapolación en línea recta.",
+                "baseline = línea recta; markov = transición más probable aprendida (TRAIN).",
     }
     _eval_cache[n] = result
     return result

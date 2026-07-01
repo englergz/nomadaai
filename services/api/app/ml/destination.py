@@ -27,6 +27,11 @@ K_NEIGH_MAX = 5000
 # (radio_m, peso_angulo, restringe_por_tipo)
 R_TIERS = [(25.0, 1.5, True), (60.0, 1.0, True), (120.0, 0.0, False)]
 
+# Baseline de Markov (1er orden) sobre una malla espacial: aprende, del conjunto TRAIN,
+# la probabilidad de pasar de una celda a otra. Sirve como comparación "que sí aprende"
+# frente al modelo (k-vecinos+rumbo) y al baseline ingenuo (línea recta).
+MARKOV_CELL_M = 80.0
+
 
 def infer_type(tid: str) -> str:
     s = (tid or "").lower()
@@ -52,6 +57,15 @@ def _haversine_m(a: list[float], b: list[float]) -> float:
     dlmb = math.radians(lon2 - lon1)
     h = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
     return 2 * R * math.asin(math.sqrt(h))
+
+
+def _cell(x: float, y: float) -> tuple[int, int]:
+    """Celda de la malla (en metros/EPSG:3857) a la que pertenece un punto."""
+    return (int(math.floor(x / MARKOV_CELL_M)), int(math.floor(y / MARKOV_CELL_M)))
+
+
+def _cell_centroid(cell: tuple[int, int]) -> tuple[float, float]:
+    return ((cell[0] + 0.5) * MARKOV_CELL_M, (cell[1] + 0.5) * MARKOV_CELL_M)
 
 
 def _point_at_distance(coords: list[list[float]], dist_m: float) -> list[float] | None:
@@ -138,6 +152,18 @@ class DestinationPredictor:
         self.n_train = len(self.train_ids)
         self.n_test = len(self.test_ids)
         self.n_segments = len(rows)
+
+        # Matriz de transición de Markov (celda -> {celda_siguiente: conteo}), SOLO con TRAIN.
+        self._trans: dict[tuple[int, int], dict[tuple[int, int], int]] = {}
+        for tid in self.train_ids:
+            seq: list[tuple[int, int]] = []
+            for (x, y, _t) in self.true_dict[tid]:
+                c = _cell(x, y)
+                if not seq or seq[-1] != c:
+                    seq.append(c)
+            for a, b in zip(seq, seq[1:]):
+                d = self._trans.setdefault(a, {})
+                d[b] = d.get(b, 0) + 1
 
     # --- API pública ---
     def predict(
@@ -270,6 +296,16 @@ class DestinationPredictor:
                 if ref2:
                     baseline_fde_m = round(_haversine_m(naive, ref2), 1)
 
+        # BASELINE de Markov: seguir la transición más probable aprendida (sí "aprende").
+        markov_fde_m = None
+        if horizon_m and truth_ll:
+            end_m = self._markov_endpoint_m(prefix_m, horizon_m)
+            if end_m:
+                lon, lat = to_wgs84(end_m[0], end_m[1])
+                ref3 = _point_at_distance(truth_ll, horizon_m)
+                if ref3:
+                    markov_fde_m = round(_haversine_m([float(lon), float(lat)], ref3), 1)
+
         return {
             "id": tid,
             "type": infer_type(tid),
@@ -287,8 +323,43 @@ class DestinationPredictor:
             ],
             "fde_m": fde_m,
             "baseline_fde_m": baseline_fde_m,
+            "markov_fde_m": markov_fde_m,
             "horizon_m": horizon_m,
         }
+
+    def _markov_endpoint_m(self, prefix_m, horizon_m: float) -> tuple[float, float] | None:
+        """Predice el punto final siguiendo, desde la última celda, la transición más
+        probable aprendida en TRAIN, hasta cubrir `horizon_m` metros. Devuelve (x, y) en 3857.
+        """
+        if not self._trans or not horizon_m or horizon_m <= 0:
+            return None
+        px, py = prefix_m[-1][0], prefix_m[-1][1]
+        cur = _cell(px, py)
+        acc = 0.0
+        visited = {cur}
+        for _ in range(80):
+            nxts = self._trans.get(cur)
+            if not nxts:
+                break
+            nxt = None
+            for c, _cnt in sorted(nxts.items(), key=lambda kv: -kv[1]):
+                if c not in visited:  # evita ciclos triviales
+                    nxt = c
+                    break
+            if nxt is None:
+                break
+            cx, cy = _cell_centroid(nxt)
+            step = math.hypot(cx - px, cy - py)
+            if step <= 1e-6:
+                visited.add(nxt); cur = nxt
+                continue
+            if acc + step >= horizon_m:
+                f = (horizon_m - acc) / step
+                return (px + (cx - px) * f, py + (cy - py) * f)
+            acc += step
+            px, py = cx, cy
+            visited.add(nxt); cur = nxt
+        return (px, py) if acc > 0 else None
 
     # --- interno ---
     def _collect(self, prefix, want_type, radius, w_ang, restrict, n_pred, topk,

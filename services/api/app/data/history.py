@@ -219,8 +219,8 @@ def stats(city: str = "tumaco") -> dict[str, Any]:
     )
     by_day = rows(
         """
-        select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') day,
-               count(*) trips, count(distinct user_id) users
+        select to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as dia,
+               count(*) as trips, count(distinct user_id) as users
         from sim_effectiveness where city = %(city)s
         group by 1 order by 1 desc limit 30
         """

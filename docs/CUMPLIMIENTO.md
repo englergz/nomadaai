@@ -8,7 +8,7 @@
 
 | OE | Indicador del anteproyecto | Estado | Evidencia / brecha |
 |----|----------------------------|--------|--------------------|
-| **OE1** | Modelo de IA que predice el destino, **precisión > 85%** | ✅ **Superado** | **90% acierto ≤50 m** (held-out, no visto), error mediano ~8 m. Ver `MODELO_PREDICCION.md`, `/trajectories/evaluate`. |
+| **OE1** | Modelo de IA que predice el destino, **precisión > 85%** | ✅ **Superado** | **90% acierto ≤50 m** (held-out, no visto), error mediano ~8 m. Validado con **comparación de 3 vías**: el modelo (k-vecinos+rumbo) supera al baseline ingenuo (línea recta, +~18 pp) y a una **cadena de Markov que aprende transiciones** — así se justifica la elección del método, no solo la meta. Ver `MODELO_PREDICCION.md`, `/trajectories/evaluate`. |
 | OE1 | Informe de caracterización (calidad, patrones) | 🟡 | Caracterización hecha (TrajCL, TRACLUS, Fréchet); falta redactarla como "informe" formal en la tesis. |
 | **OE2** | Modelo de IA de riesgo, **precisión > 85%** | ⚠️ **Vacío clave** | El riesgo es un **índice compuesto (RTM)** fundamentado, **no un predictor validado**: no hay precisión medida porque falta **microdato de delito georreferenciado (DIJIN)** para calibrar/validar (RTM/PAI). Hoy no se puede afirmar el 85%. |
 | OE2 | Informe de datos de riesgo (calidad, patrones) | 🟡 | Variables reales integradas (TerriData IPM, servicios); incidentes a nivel **municipal**, no punto; socioeconómico **municipal/urbano-rural**, no manzana. |
