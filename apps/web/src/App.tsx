@@ -55,19 +55,19 @@ function vehicleSVG(t?: string): string {
 }
 
 interface Notif { id: number; title: string; body: string; time: string; }
-// Acumulado de un viaje en curso: predicción del modelo vs baseline (línea recta).
-interface TripAgg { n: number; modelErr: number; baseErr: number; modelHit50: number; baseHit50: number; }
-const emptyTripAgg = (): TripAgg => ({ n: 0, modelErr: 0, baseErr: 0, modelHit50: 0, baseHit50: 0 });
+// Acumulado de un viaje en curso: predicción del modelo vs baseline (línea recta) + alertas.
+interface TripAgg { n: number; modelErr: number; baseErr: number; modelHit50: number; baseHit50: number; alerts: number; }
+const emptyTripAgg = (): TripAgg => ({ n: 0, modelErr: 0, baseErr: 0, modelHit50: 0, baseHit50: 0, alerts: 0 });
 // Comparación de protección de un viaje 'ruta nueva': ruta segura vs ruta directa.
 interface Protection { exposure_reduction_pct: number; safe_exposure: number; direct_exposure: number; safe_dist_m: number; direct_dist_m: number; }
 // Histórico local (respaldo cuando no hay DB): mismas dos comparaciones agregadas.
 interface HistLocal {
-  trips: number; since: number | null; updated: number | null;
+  trips: number; alerts: number; since: number | null; updated: number | null;
   pred: { n: number; modelErrSum: number; baseErrSum: number; modelHit50: number; baseHit50: number };
   prot: { n: number; redSum: number };
 }
 const emptyHist = (): HistLocal => ({
-  trips: 0, since: null, updated: null,
+  trips: 0, alerts: 0, since: null, updated: null,
   pred: { n: 0, modelErrSum: 0, baseErrSum: 0, modelHit50: 0, baseHit50: 0 },
   prot: { n: 0, redSum: 0 },
 });
@@ -197,7 +197,7 @@ export default function App() {
     const H = histLocalRef.current;
     const now = Date.now();
     if (!H.since) H.since = now;
-    H.updated = now; H.trips += 1;
+    H.updated = now; H.trips += 1; H.alerts += a.alerts;
     H.pred.n += a.n; H.pred.modelErrSum += a.modelErr; H.pred.baseErrSum += a.baseErr;
     H.pred.modelHit50 += a.modelHit50; H.pred.baseHit50 += a.baseHit50;
     if (p) { H.prot.n += 1; H.prot.redSum += p.exposure_reduction_pct; }
@@ -212,7 +212,7 @@ export default function App() {
           user_id: uidRef.current, session_id: sessionRef.current,
           mode: m.mode, vehicle: m.vehicle, hour: m.hour,
           n_pred: a.n, model_err_sum: a.modelErr, base_err_sum: a.baseErr,
-          model_hit50: a.modelHit50, base_hit50: a.baseHit50,
+          model_hit50: a.modelHit50, base_hit50: a.baseHit50, alerts: a.alerts,
           exposure_reduction_pct: p?.exposure_reduction_pct ?? null,
           safe_exposure: p?.safe_exposure ?? null, direct_exposure: p?.direct_exposure ?? null,
           safe_dist_m: p?.safe_dist_m ?? null, direct_dist_m: p?.direct_dist_m ?? null,
@@ -235,7 +235,7 @@ export default function App() {
     if (histSummary?.available && histSummary.trips > 0) {
       const P = histSummary.prediccion, R = histSummary.proteccion;
       return {
-        source: "db" as const, trips: histSummary.trips,
+        source: "db" as const, trips: histSummary.trips, alerts: histSummary.alerts ?? 0,
         pred: P ? { model50: P.model_acc50_pct, base50: P.base_acc50_pct, mejora: P.mejora_pp, modelErr: P.model_err_mean_m, baseErr: P.base_err_mean_m, n: P.n } : null,
         prot: R ? { n: R.n, red: R.exposure_reduction_avg_pct } : null,
         since: fmtDate(histSummary.since ? Date.parse(histSummary.since) : null),
@@ -246,7 +246,7 @@ export default function App() {
     if (H && H.trips > 0) {
       const pn = H.pred.n, r1 = (x: number) => Math.round(x * 10) / 10;
       return {
-        source: "local" as const, trips: H.trips,
+        source: "local" as const, trips: H.trips, alerts: H.alerts,
         pred: pn ? { model50: r1(100 * H.pred.modelHit50 / pn), base50: r1(100 * H.pred.baseHit50 / pn), mejora: r1(100 * (H.pred.modelHit50 - H.pred.baseHit50) / pn), modelErr: r1(H.pred.modelErrSum / pn), baseErr: r1(H.pred.baseErrSum / pn), n: pn } : null,
         prot: H.prot.n ? { n: H.prot.n, red: r1(H.prot.redSum / H.prot.n) } : null,
         since: fmtDate(H.since), updated: fmtDate(H.updated),
@@ -548,6 +548,7 @@ export default function App() {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (a.cell_id && a.cell_id !== lastCellRef.current) {
               lastCellRef.current = a.cell_id;
+              tripAggRef.current.alerts += 1;
               const id = ++notifIdRef.current;
               setNotifs((prev) => [{
                 id,
@@ -670,42 +671,35 @@ export default function App() {
           if (!hv && !histGlobal) return null;
           return (
             <>
-            <h2 className="step">2 · Tu efectividad</h2>
+            <h2 className="step">2 · Tu protección</h2>
             <div className="livecard">
-              <div className="livecard-h">Se acumula automáticamente · anónimo, sin registro{hv ? ` · ${hv.trips} ${hv.trips === 1 ? "viaje" : "viajes"}` : ""}</div>
+              <div className="livecard-h">Lo que NómadaAI hizo por ti · anónimo, sin registro</div>
 
               {!hv && (
-                <div className="evalrow" style={{ color: "var(--muted)" }}>Aún no tienes viajes. Corre una simulación para empezar a medir tu efectividad.</div>
-              )}
-
-              {hv?.pred && (
-                <>
-                  <div className="evalsub">Predicción — ¿aporta el modelo?</div>
-                  <table className="scn">
-                    <thead><tr><th></th><th>Modelo</th><th>Línea recta</th></tr></thead>
-                    <tbody>
-                      <tr><td>acierto ≤50 m</td><td><b>{hv.pred.model50}%</b></td><td>{hv.pred.base50}%</td></tr>
-                      <tr><td>error medio</td><td><b>{hv.pred.modelErr} m</b></td><td>{hv.pred.baseErr} m</td></tr>
-                    </tbody>
-                  </table>
-                  <div className="evalrow" style={{ color: "#86efac" }}>El modelo mejora <b>+{hv.pred.mejora} pp</b> sobre la línea recta ({hv.pred.n} predicciones).</div>
-                </>
+                <div className="evalrow" style={{ color: "var(--muted)" }}>Aún no tienes viajes. Corre una simulación para ver cómo te protege.</div>
               )}
 
               {hv?.prot ? (
                 <>
-                  <div className="evalsub">Protección — ruta segura vs directa</div>
-                  <div className="evalbig">−{hv.prot.red}% <span>de exposición al riesgo</span></div>
-                  <div className="evalrow">promedio sobre {hv.prot.n} {hv.prot.n === 1 ? "ruta" : "rutas"} generadas</div>
+                  <div className="evalbig">−{hv.prot.red}% <span>de exposición al riesgo evitada</span></div>
+                  <div className="evalrow">eligiendo la ruta segura en vez de la directa · promedio de {hv.prot.n} {hv.prot.n === 1 ? "ruta" : "rutas"}</div>
                 </>
               ) : hv ? (
-                <div className="evalrow" style={{ color: "var(--muted)" }}>Genera una «Ruta nueva» para medir la protección (segura vs directa).</div>
+                <div className="evalrow" style={{ color: "var(--muted)" }}>Genera una «Ruta nueva» y verás cuánto riesgo te evita el desvío seguro.</div>
               ) : null}
 
+              {hv && (
+                <div className="benefit">
+                  <div><b>{hv.trips}</b><span>viajes</span></div>
+                  <div><b>{hv.alerts}</b><span>alertas a tiempo</span></div>
+                  <div><b>{hv.prot ? `−${hv.prot.red}%` : "—"}</b><span>riesgo evitado</span></div>
+                </div>
+              )}
+
               {histGlobal && (
-                <div className="livecard-row" style={{ marginTop: 8 }}>
-                  <b>Global (BI):</b> {histGlobal.trips} {histGlobal.trips === 1 ? "viaje" : "viajes"} de {histGlobal.users} {histGlobal.users === 1 ? "usuario" : "usuarios"}
-                  {histGlobal.proteccion ? ` · −${histGlobal.proteccion.exposure_reduction_avg_pct}% exposición media` : ""}
+                <div className="livecard-row" style={{ marginTop: 8, color: "var(--muted)" }}>
+                  En toda la comunidad: {histGlobal.trips} {histGlobal.trips === 1 ? "viaje" : "viajes"} de {histGlobal.users} {histGlobal.users === 1 ? "persona" : "personas"}
+                  {histGlobal.alerts ? ` · ${histGlobal.alerts} alertas` : ""}
                 </div>
               )}
 

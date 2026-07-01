@@ -247,3 +247,9 @@ body.light .push-time { color: #b91c1c; }
 h2.step { font-size: 13px; margin: 18px 0 8px; color: var(--text); text-transform: none; letter-spacing: 0; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .scn-details { margin-top: 8px; }
 .scn-details summary { font-size: 12px; color: var(--accent); cursor: pointer; }
+
+/* Tarjeta de beneficio del usuario (Tu protección) */
+.benefit { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 10px; }
+.benefit > div { background: rgba(34,197,94,0.10); border: 1px solid var(--border); border-radius: 8px; padding: 8px 4px; text-align: center; }
+.benefit b { display: block; font-size: 17px; color: var(--text); }
+.benefit span { font-size: 9px; color: var(--muted); }

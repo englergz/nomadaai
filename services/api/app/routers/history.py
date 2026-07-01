@@ -27,6 +27,7 @@ class TripRecord(BaseModel):
     base_err_sum: float = 0.0
     model_hit50: int = 0
     base_hit50: int = 0
+    alerts: int = 0
     exposure_reduction_pct: Optional[float] = None
     safe_exposure: Optional[float] = None
     direct_exposure: Optional[float] = None

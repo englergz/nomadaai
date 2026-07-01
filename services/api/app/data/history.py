@@ -33,6 +33,7 @@ create table if not exists sim_effectiveness (
   base_err_sum  double precision not null default 0,
   model_hit50   int     not null default 0,
   base_hit50    int     not null default 0,
+  alerts        int     not null default 0,   -- alertas de riesgo recibidas a tiempo
   -- Protección: ruta segura vs directa (solo modo 'draw')
   exposure_reduction_pct double precision,
   safe_exposure  double precision,
@@ -83,11 +84,11 @@ def log_trip(rec: dict[str, Any]) -> dict[str, Any]:
                 """
                 insert into sim_effectiveness
                   (city, user_id, session_id, mode, vehicle, hour, n_pred, model_err_sum,
-                   base_err_sum, model_hit50, base_hit50, exposure_reduction_pct, safe_exposure,
-                   direct_exposure, safe_dist_m, direct_dist_m)
+                   base_err_sum, model_hit50, base_hit50, alerts, exposure_reduction_pct,
+                   safe_exposure, direct_exposure, safe_dist_m, direct_dist_m)
                 values (%(city)s, %(user_id)s, %(session_id)s, %(mode)s, %(vehicle)s, %(hour)s,
                         %(n_pred)s, %(model_err_sum)s, %(base_err_sum)s, %(model_hit50)s,
-                        %(base_hit50)s, %(exposure_reduction_pct)s, %(safe_exposure)s,
+                        %(base_hit50)s, %(alerts)s, %(exposure_reduction_pct)s, %(safe_exposure)s,
                         %(direct_exposure)s, %(safe_dist_m)s, %(direct_dist_m)s)
                 returning id
                 """,
@@ -103,6 +104,7 @@ def log_trip(rec: dict[str, Any]) -> dict[str, Any]:
                     "base_err_sum": float(rec.get("base_err_sum", 0.0)),
                     "model_hit50": int(rec.get("model_hit50", 0)),
                     "base_hit50": int(rec.get("base_hit50", 0)),
+                    "alerts": int(rec.get("alerts", 0)),
                     "exposure_reduction_pct": rec.get("exposure_reduction_pct"),
                     "safe_exposure": rec.get("safe_exposure"),
                     "direct_exposure": rec.get("direct_exposure"),
@@ -140,6 +142,7 @@ def summary(city: str = "tumaco", user_id: Optional[str] = None) -> dict[str, An
                   coalesce(sum(base_err_sum), 0)  as base_err_sum,
                   coalesce(sum(model_hit50), 0)   as model_hit50,
                   coalesce(sum(base_hit50), 0)    as base_hit50,
+                  coalesce(sum(alerts), 0)        as alerts,
                   count(exposure_reduction_pct)   as n_routes,
                   avg(exposure_reduction_pct)     as exp_red_avg,
                   min(created_at)                 as since,
@@ -151,7 +154,7 @@ def summary(city: str = "tumaco", user_id: Optional[str] = None) -> dict[str, An
             )
             r = cur.fetchone()
 
-    trips, users, n_pred, m_sum, b_sum, m_hit, b_hit, n_routes, exp_avg, since, updated = r
+    trips, users, n_pred, m_sum, b_sum, m_hit, b_hit, alerts, n_routes, exp_avg, since, updated = r
     pred = None
     if n_pred:
         pred = {
@@ -171,6 +174,7 @@ def summary(city: str = "tumaco", user_id: Optional[str] = None) -> dict[str, An
         "user_id": user_id,
         "trips": int(trips),
         "users": int(users),
+        "alerts": int(alerts),
         "prediccion": pred,
         "proteccion": prot,
         "since": since.isoformat() if since else None,

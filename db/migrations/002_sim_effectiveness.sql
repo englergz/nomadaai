@@ -20,6 +20,7 @@ create table if not exists sim_effectiveness (
   base_err_sum  double precision not null default 0,
   model_hit50   int     not null default 0,
   base_hit50    int     not null default 0,
+  alerts        int     not null default 0,   -- alertas de riesgo recibidas a tiempo
   -- Protección (solo modo 'draw')
   exposure_reduction_pct double precision,
   safe_exposure  double precision,
