@@ -4,19 +4,21 @@
 > indicadores aprobados. Honesta a propósito: declarar los vacíos **aumenta** la validez de la tesis.
 > Leyenda: ✅ cumplido · 🟡 parcial · ⚠️ vacío/riesgo.
 
-## Tablero por objetivo
+## Tablero: prometido → hecho → cumplido
 
-| OE | Indicador del anteproyecto | Estado | Evidencia / brecha |
-|----|----------------------------|--------|--------------------|
-| **OE1** | Modelo de IA que predice el destino, **precisión > 85%** | ✅ **Superado** | **90% acierto ≤50 m** (held-out, no visto), error mediano ~8 m. Validado con **comparación de 3 vías**: el modelo (k-vecinos+rumbo) supera al baseline ingenuo (línea recta, +~18 pp) y a una **cadena de Markov que aprende transiciones** — así se justifica la elección del método, no solo la meta. Ver `MODELO_PREDICCION.md`, `/trajectories/evaluate`. |
-| OE1 | Informe de caracterización (calidad, patrones) | 🟡 | Caracterización hecha (TrajCL, TRACLUS, Fréchet); falta redactarla como "informe" formal en la tesis. |
-| **OE2** | Modelo de IA de riesgo, **precisión > 85%** | 🟡 **Validable con lo que hay** | El anteproyecto **no** compromete microdato DIJIN: el objetivo general es sobre **datos simulados** y OE2 dice *"identifique y **simule** eventos… con análisis de datos históricos… reportes policiales y denuncias"* (genérico). El riesgo es un **índice RTM** construido con **datos reales abiertos** (homicidios datos.gov.co georreferenciados, DANE, TerriData). **Acción para el 85%:** validar el mapa RTM contra los **homicidios georreferenciados** que ya se tienen (¿las zonas de alto riesgo capturan dónde ocurrieron? → precisión/recall/F1). El microdato **DIJIN es un *plus*** (petición ya radicada), no un requisito. |
-| OE2 | Informe de datos de riesgo (calidad, patrones) | 🟡 | Variables reales integradas (TerriData IPM, servicios); incidentes a nivel **municipal**, no punto; socioeconómico **municipal/urbano-rural**, no manzana. |
-| **OE3** | Sistema de **recomendación de rutas seguras** (minimiza exposición), **~69%** + tiempo real | ✅ **Cumplido** | **Alerta anticipada** (88.7%) + ruteo **direccional, por tipo y ponderado por riesgo**: `/route/build` calcula el **desvío que minimiza la exposición** y lo compara con la ruta directa (`risk_weight` = λ). |
-| OE3 | Panel con **≥3 capas** (riesgo, POIs, rutas) | ✅ **Cumplido** | Riesgo + ruta segura + ruta directa + recorrido + corredores + **capa de POIs** (OSM: policía, salud, educación, transporte…; `/pois`, toggle "Lugares"). Supera las 3 capas con puntos de interés. |
-| **OE4** | Evaluación en **≥5 escenarios**, cuali+cuanti | ✅/🟡 | **45 escenarios** (hora×umbral×look-ahead) cuantitativos + efectividad de alerta. Cuantitativo cubierto; falta el componente cualitativo. |
-| OE4 | **Mejora de percepción de seguridad ≥30%** | 🟡 **Proxy medido** | La encuesta de percepción no aplica con datos simulados → se usa un **proxy objetivo**. **Barrido O-D sistemático hecho** (`scripts/oe4_od_sweep.py`, 40 O-D × 5 horas = 200 rutas): la ruta segura **reduce la exposición en el 85% de los casos**, con **+1.9%** de distancia; magnitud **media 3.4%** (máx 12.2%). Honesto: la reducción media es **modesta** porque el mapa de riesgo es relativamente uniforme; el efecto es consistente pero pequeño. El "≥30%" de *percepción* queda como estudio con usuarios (trabajo futuro). CSV: `artifacts/eval/oe4_od_sweep.csv`. |
-| OE4 | Sistema optimizado, **95% funcionalidad sin errores críticos** | 🟡 | App desplegada y operativa (HF Space); falta un **informe de QA** formal (cobertura de pruebas, tasa de errores). |
+> Columna **Prometido** = texto literal de la tabla "Resultados esperados / Indicadores" del
+> anteproyecto aprobado (págs. 21-24). **Cumplido:** ✅ sí · 🟡 parcial · ⚠️ pendiente.
+
+| OE | Prometido (indicador textual del anteproyecto) | Hecho | Cumplido |
+|----|-----------------------------------------------|-------|----------|
+| **OE1** | "Modelo de IA desarrollado e integrado en el sistema, con pruebas de funcionalidad y rendimiento, y **precisión de predicción superior al 85%**." | Modelo (k-vecinos + rumbo) integrado y evaluado sobre conjunto **no visto** (train/test 80/20): **90% ≤50 m**, 96% ≤100 m, error mediano 8 m. Comparación de **3 vías** (modelo vs línea recta vs Markov). `/trajectories/evaluate`. | ✅ **Superado** |
+| OE1 | "Informe de caracterización entregado con especificaciones de calidad y patrones identificados." | Caracterización hecha (TrajCL, TRACLUS, Fréchet); falta **redactarla como informe** en el documento. | 🟡 |
+| **OE2** | "Modelo de IA (algoritmo desarrollado e integrado…, con pruebas de funcionalidad y rendimiento, y **precisión de predicción superior al 85%**)." | Índice de riesgo **RTM espacio-temporal** operativo (`/risk/zones?hour=`) con datos **reales** (homicidios datos.gov.co, DANE, TerriData). **Falta calcular la precisión** validando el mapa contra los **homicidios georreferenciados** ya disponibles (no requiere DIJIN). | 🟡 **falta el cálculo** |
+| OE2 | "Informe de recopilación, preprocesamiento y categorización de datos… con especificaciones de calidad y patrones." | Datos integrados y categorizados (tipo/hora/zona); falta **redactar el informe**. | 🟡 |
+| **OE3** | "Sistema de recomendaciones operativo…, con un **69% de precisión** en identificación de áreas de riesgo y rutas optimizadas **en tiempo real**." | Ruteo **direccional, por tipo y ponderado por riesgo** (`/route/build`) + **alerta anticipada 88.7%**. El sistema está operativo; el "69% de identificación de áreas" es la **misma validación del riesgo** de OE2 (pendiente de cálculo). | 🟡→✅ *(sistema ✅; falta el % de ID)* |
+| OE3 | "Panel visual… mostrando **al menos tres capas** (zonas de riesgo, puntos de interés y rutas recomendadas)." | Riesgo + rutas (segura/directa) + recorrido + corredores + **capa de POIs** (`/pois`, toggle "Lugares"). | ✅ **Cumplido** |
+| **OE4** | "Informe… sobre **≥5 escenarios** urbanos representativos… análisis cuali y cuantitativo que muestre una **mejora… de al menos un 30%**." | **45 escenarios** (hora×umbral×look-ahead) + **barrido O-D** (200 rutas): la ruta segura mejora en **85%** de los casos (+1.9% distancia, reducción media 3.4%). Proxy **objetivo**; el "≥30% de **percepción**" requiere **encuesta con usuarios** (no aplica con datos simulados → trabajo futuro). | 🟡 *(escenarios ✅; percepción = futuro)* |
+| OE4 | "Sistema revisado y optimizado…, con **95% de funcionalidad operativa sin errores críticos**." | App **desplegada y operativa** (HF Space, API + web); falta un **informe de QA** (cobertura/errores). | 🟡 |
 
 ## Lo que está sólido (fortalezas)
 
