@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { ClerkProvider } from "@clerk/clerk-react";
+import { esES } from "@clerk/localizations";
 import App from "./App";
 import "./index.css";
 
@@ -9,7 +10,7 @@ import "./index.css";
 const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 const tree = clerkKey ? (
-  <ClerkProvider publishableKey={clerkKey} afterSignOutUrl="/">
+  <ClerkProvider publishableKey={clerkKey} localization={esES} afterSignOutUrl="/">
     <App />
   </ClerkProvider>
 ) : (
