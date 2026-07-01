@@ -71,6 +71,22 @@ python appNomadaAI/app/db/etl/load_corridors.py
 > OE1 (lo que está en producción) **no** usa la base de datos: el backend lee los artefactos
 > embebidos. Supabase se activa al construir OE2 (riesgo) y OE3 (ruteo).
 
+### Histórico de efectividad (comparativo, persistente)
+
+El endpoint `/history` guarda **un registro por viaje simulado** con dos comparaciones —
+predicción (modelo vs línea recta) y protección (ruta segura vs directa) — y las agrega en
+`/history/summary`. La tabla `sim_effectiveness` se **crea sola** en el primer uso.
+
+Para activarlo en el Space, define el secret **`DATABASE_URL`**:
+
+1. HF Space → *Settings → Variables and secrets → New secret*.
+2. Nombre `DATABASE_URL`, valor = la *Connection string (URI)* de Supabase (usa el **pooler**
+   en el puerto `6543` para conexiones cortas; reemplaza `<password>`).
+3. Guardar y reiniciar el Space.
+
+Sin este secret la app funciona igual, pero el histórico cae a almacenamiento del navegador
+(no persiste entre dispositivos). Es **replicable a otra ciudad**: cambia la columna `city`.
+
 ## 4. (Opcional) Auto-deploy desde GitHub
 
 Para que cada `git push` a GitHub actualice el Space, en los *Settings* del Space puedes

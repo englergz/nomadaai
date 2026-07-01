@@ -55,10 +55,22 @@ function vehicleSVG(t?: string): string {
 }
 
 interface Notif { id: number; title: string; body: string; time: string; }
-interface LiveStats { n: number; fde: number; h50: number; h100: number; alerts: number; }
-interface LiveBuckets { test: LiveStats; draw: LiveStats; }
-const emptyStats = (): LiveStats => ({ n: 0, fde: 0, h50: 0, h100: 0, alerts: 0 });
-const emptyBuckets = (): LiveBuckets => ({ test: emptyStats(), draw: emptyStats() });
+// Acumulado de un viaje en curso: predicción del modelo vs baseline (línea recta).
+interface TripAgg { n: number; modelErr: number; baseErr: number; modelHit50: number; baseHit50: number; }
+const emptyTripAgg = (): TripAgg => ({ n: 0, modelErr: 0, baseErr: 0, modelHit50: 0, baseHit50: 0 });
+// Comparación de protección de un viaje 'ruta nueva': ruta segura vs ruta directa.
+interface Protection { exposure_reduction_pct: number; safe_exposure: number; direct_exposure: number; safe_dist_m: number; direct_dist_m: number; }
+// Histórico local (respaldo cuando no hay DB): mismas dos comparaciones agregadas.
+interface HistLocal {
+  trips: number; since: number | null; updated: number | null;
+  pred: { n: number; modelErrSum: number; baseErrSum: number; modelHit50: number; baseHit50: number };
+  prot: { n: number; redSum: number };
+}
+const emptyHist = (): HistLocal => ({
+  trips: 0, since: null, updated: null,
+  pred: { n: 0, modelErrSum: 0, baseErrSum: 0, modelHit50: 0, baseHit50: 0 },
+  prot: { n: 0, redSum: 0 },
+});
 
 export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -99,10 +111,12 @@ export default function App() {
   const [clock, setClock] = useState(20 * 3600);
   const [liveRisk, setLiveRisk] = useState<number | null>(null);
   const [notifs, setNotifs] = useState<Notif[]>([]);
-  const [liveStats, setLiveStats] = useState<LiveBuckets | null>(null);
-  const liveRef = useRef<LiveBuckets>(emptyBuckets());
-  const [liveMeta, setLiveMeta] = useState<{ since: number | null; updated: number | null }>({ since: null, updated: null });
-  const liveMetaRef = useRef<{ since: number | null; updated: number | null }>({ since: null, updated: null });
+  const tripAggRef = useRef<TripAgg>(emptyTripAgg());
+  const protectionRef = useRef<Protection | null>(null);
+  const tripMetaRef = useRef<{ mode: string; vehicle: string; hour: number }>({ mode: "test", vehicle: "car", hour: 20 });
+  const histLocalRef = useRef<HistLocal>(emptyHist());
+  const [histLocal, setHistLocal] = useState<HistLocal | null>(null);   // respaldo (navegador)
+  const [histSummary, setHistSummary] = useState<any>(null);            // agregados desde la DB
   const [showHelp, setShowHelp] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
@@ -128,20 +142,14 @@ export default function App() {
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { document.body.className = theme === "light" ? "light" : ""; }, [theme]);
   useEffect(() => { followRef.current = follow; }, [follow]);
-  // Histórico de efectividad: cargar el acumulado de sesiones anteriores
+  // Histórico: cargar respaldo local y traer agregados de la DB (si está configurada).
   useEffect(() => {
     try {
-      const s = localStorage.getItem("nomadaai_live");
-      if (s) {
-        const p = JSON.parse(s);
-        if (p && p.test && p.draw) {
-          liveRef.current = { test: p.test, draw: p.draw };
-          liveMetaRef.current = { since: p.since ?? null, updated: p.updated ?? null };
-          setLiveStats({ test: p.test, draw: p.draw });
-          setLiveMeta({ ...liveMetaRef.current });
-        }
-      }
+      const s = localStorage.getItem("nomadaai_hist");
+      if (s) { const p = JSON.parse(s) as HistLocal; histLocalRef.current = p; setHistLocal(p); }
     } catch { /* ignore */ }
+    refreshSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Precalentar la medición de efectividad: el backend cachea el cálculo pesado y dejamos el
@@ -152,23 +160,78 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Guarda el histórico con continuidad: conserva la fecha de inicio y registra la última actualización.
-  function persistLive() {
-    const now = Date.now();
-    if (!liveMetaRef.current.since) liveMetaRef.current.since = now;
-    liveMetaRef.current.updated = now;
-    const snap = { test: { ...liveRef.current.test }, draw: { ...liveRef.current.draw } };
-    setLiveStats(snap);
-    setLiveMeta({ ...liveMetaRef.current });
-    try { localStorage.setItem("nomadaai_live", JSON.stringify({ ...snap, ...liveMetaRef.current })); } catch { /* ignore */ }
+  async function refreshSummary() {
+    try {
+      const s = await fetch(`${base()}/history/summary`).then((r) => r.json());
+      setHistSummary(s?.available ? s : null);
+    } catch { setHistSummary(null); }
   }
 
-  function resetLive() {
-    liveRef.current = emptyBuckets();
-    liveMetaRef.current = { since: null, updated: null };
-    setLiveStats(null);
-    setLiveMeta({ since: null, updated: null });
-    try { localStorage.removeItem("nomadaai_live"); } catch { /* ignore */ }
+  // Al terminar un viaje: consolida sus dos comparaciones (predicción y protección), las guarda
+  // en la DB (producto real) y en un respaldo local, y refresca los agregados.
+  async function finishTrip() {
+    const a = tripAggRef.current;
+    if (a.n === 0 && !protectionRef.current) return;
+    const p = protectionRef.current;
+    // respaldo local (para que el histórico funcione aunque no haya DB configurada)
+    const H = histLocalRef.current;
+    const now = Date.now();
+    if (!H.since) H.since = now;
+    H.updated = now; H.trips += 1;
+    H.pred.n += a.n; H.pred.modelErrSum += a.modelErr; H.pred.baseErrSum += a.baseErr;
+    H.pred.modelHit50 += a.modelHit50; H.pred.baseHit50 += a.baseHit50;
+    if (p) { H.prot.n += 1; H.prot.redSum += p.exposure_reduction_pct; }
+    setHistLocal({ ...H });
+    try { localStorage.setItem("nomadaai_hist", JSON.stringify(H)); } catch { /* ignore */ }
+    // DB
+    const m = tripMetaRef.current;
+    try {
+      await fetch(`${base()}/history/trip`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          mode: m.mode, vehicle: m.vehicle, hour: m.hour,
+          n_pred: a.n, model_err_sum: a.modelErr, base_err_sum: a.baseErr,
+          model_hit50: a.modelHit50, base_hit50: a.baseHit50,
+          exposure_reduction_pct: p?.exposure_reduction_pct ?? null,
+          safe_exposure: p?.safe_exposure ?? null, direct_exposure: p?.direct_exposure ?? null,
+          safe_dist_m: p?.safe_dist_m ?? null, direct_dist_m: p?.direct_dist_m ?? null,
+        }),
+      });
+      refreshSummary();
+    } catch { /* silencioso: la simulación no depende de la DB */ }
+  }
+
+  async function resetHist() {
+    histLocalRef.current = emptyHist();
+    setHistLocal(null);
+    try { localStorage.removeItem("nomadaai_hist"); } catch { /* ignore */ }
+    try { await fetch(`${base()}/history`, { method: "DELETE" }); } catch { /* ignore */ }
+    refreshSummary();
+  }
+
+  // Vista unificada del histórico: prioriza la DB; si no hay, usa el respaldo local.
+  function histView() {
+    if (histSummary?.available && histSummary.trips > 0) {
+      const P = histSummary.prediccion, R = histSummary.proteccion;
+      return {
+        source: "db" as const, trips: histSummary.trips,
+        pred: P ? { model50: P.model_acc50_pct, base50: P.base_acc50_pct, mejora: P.mejora_pp, modelErr: P.model_err_mean_m, baseErr: P.base_err_mean_m, n: P.n } : null,
+        prot: R ? { n: R.n, red: R.exposure_reduction_avg_pct } : null,
+        since: fmtDate(histSummary.since ? Date.parse(histSummary.since) : null),
+        updated: fmtDate(histSummary.updated ? Date.parse(histSummary.updated) : null),
+      };
+    }
+    const H = histLocal;
+    if (H && H.trips > 0) {
+      const pn = H.pred.n, r1 = (x: number) => Math.round(x * 10) / 10;
+      return {
+        source: "local" as const, trips: H.trips,
+        pred: pn ? { model50: r1(100 * H.pred.modelHit50 / pn), base50: r1(100 * H.pred.baseHit50 / pn), mejora: r1(100 * (H.pred.modelHit50 - H.pred.baseHit50) / pn), modelErr: r1(H.pred.modelErrSum / pn), baseErr: r1(H.pred.baseErrSum / pn), n: pn } : null,
+        prot: H.prot.n ? { n: H.prot.n, red: r1(H.prot.redSum / H.prot.n) } : null,
+        since: fmtDate(H.since), updated: fmtDate(H.updated),
+      };
+    }
+    return null;
   }
 
   function pushLog(line: string) {
@@ -326,6 +389,7 @@ export default function App() {
       coords = t.coords;
     } catch (e) { alert("No pude cargar el recorrido: " + (e as Error).message); return; }
     excludeRef.current = tripId; typeRef.current = selectedTrip?.type ?? "car";
+    protectionRef.current = null;  // en 'no visto' no hay ruta segura vs directa
     startStream(coords);
   }
 
@@ -349,6 +413,13 @@ export default function App() {
       if (c) {
         const extra = c.direct_distance_m ? Math.round(100 * (c.safe_distance_m - c.direct_distance_m) / c.direct_distance_m) : 0;
         setSafeMsg(`Ruta segura: −${c.exposure_reduction_pct}% de exposición al riesgo vs. la directa (+${extra}% distancia).`);
+        protectionRef.current = {
+          exposure_reduction_pct: c.exposure_reduction_pct,
+          safe_exposure: c.safe_exposure, direct_exposure: c.direct_exposure,
+          safe_dist_m: c.safe_distance_m, direct_dist_m: c.direct_distance_m,
+        };
+      } else {
+        protectionRef.current = null;
       }
       const adapted = j.vehicle_restricted ? `adaptada a ${labelForType(drawVeh || "car")}` : "red general";
       const dir = j.directional ? "respeta sentidos" : "sin sentido estricto";
@@ -364,6 +435,8 @@ export default function App() {
     stopSim();
     setFinished(false); setNotifs([]); setLiveRisk(null); setLog([]);
     setPredInfo("Detectando movimiento…");
+    tripAggRef.current = emptyTripAgg();
+    tripMetaRef.current = { mode: modeRef.current, vehicle: typeRef.current, hour };
     lastPredRef.current = 0; lastCellRef.current = ""; distRef.current = 0;
     clockRef.current = hour * 3600; setClock(clockRef.current);
 
@@ -430,10 +503,20 @@ export default function App() {
           const predEnd = cand.geometry.coordinates[cand.geometry.coordinates.length - 1] as [number, number];
           const realAhead = interpAt(coords, cum, Math.min(total, d + cand.length_m));
           const fde = haversine(predEnd, realAhead);
-          const L = excludeRef.current ? liveRef.current.test : liveRef.current.draw;
-          L.n += 1; L.fde += fde; if (fde <= 50) L.h50 += 1; if (fde <= 100) L.h100 += 1;
-          persistLive();
-          pushLog(`   efectividad: error ${fde.toFixed(0)} m (${excludeRef.current ? "no visto" : "ruta nueva"}, acum ${L.n})`);
+          // baseline ingenuo: extrapolar en línea recta el rumbo actual la misma distancia
+          const prevPt = interpAt(coords, cum, Math.max(0, d - 25));
+          const step = haversine(prevPt, pos);
+          let baseFde = fde;
+          if (step > 1e-6) {
+            const f = cand.length_m / step;
+            const straight: [number, number] = [pos[0] + (pos[0] - prevPt[0]) * f, pos[1] + (pos[1] - prevPt[1]) * f];
+            baseFde = haversine(straight, realAhead);
+          }
+          const A = tripAggRef.current;
+          A.n += 1; A.modelErr += fde; A.baseErr += baseFde;
+          if (fde <= 50) A.modelHit50 += 1;
+          if (baseFde <= 50) A.baseHit50 += 1;
+          pushLog(`   modelo ${fde.toFixed(0)} m vs línea recta ${baseFde.toFixed(0)} m (viaje, n=${A.n})`);
         }
         const a = res.alert;
         if (a) {
@@ -444,8 +527,6 @@ export default function App() {
             setPoint(map, "danger", [a.lon, a.lat]);
             if (a.cell_id && a.cell_id !== lastCellRef.current) {
               lastCellRef.current = a.cell_id;
-              (excludeRef.current ? liveRef.current.test : liveRef.current.draw).alerts += 1;
-              persistLive();
               const id = ++notifIdRef.current;
               setNotifs((prev) => [{
                 id,
@@ -458,7 +539,7 @@ export default function App() {
         }
       } catch (e) { console.error("online:", e); }
     }
-    if (d >= total) { stopSim(); setFinished(true); setProgress(100); pushLog("🏁 Recorrido finalizado"); }
+    if (d >= total) { stopSim(); setFinished(true); setProgress(100); pushLog("🏁 Recorrido finalizado"); finishTrip(); }
   }
 
   async function onlineCall(acc: [number, number][]) {
@@ -599,32 +680,46 @@ export default function App() {
         <div className="progress"><div className="bar" style={{ width: `${progress}%` }} /></div>
         <p className="hint">{predInfo}</p>
 
-        {liveStats && (liveStats.test.n > 0 || liveStats.draw.n > 0) && (
-          <div className="livecard">
-            <div className="livecard-h">Histórico de efectividad · No visto vs Ruta nueva</div>
-            <table className="scn">
-              <thead><tr><th></th><th>No visto</th><th>Ruta nueva</th></tr></thead>
-              <tbody>
-                <tr><td>acierto ≤50 m</td>
-                  <td>{liveStats.test.n ? Math.round((100 * liveStats.test.h50) / liveStats.test.n) + "%" : "—"}</td>
-                  <td>{liveStats.draw.n ? Math.round((100 * liveStats.draw.h50) / liveStats.draw.n) + "%" : "—"}</td></tr>
-                <tr><td>error medio</td>
-                  <td>{liveStats.test.n ? (liveStats.test.fde / liveStats.test.n).toFixed(0) + " m" : "—"}</td>
-                  <td>{liveStats.draw.n ? (liveStats.draw.fde / liveStats.draw.n).toFixed(0) + " m" : "—"}</td></tr>
-                <tr><td>nº predicciones</td>
-                  <td>{liveStats.test.n || "—"}</td><td>{liveStats.draw.n || "—"}</td></tr>
-                <tr><td>alertas</td>
-                  <td>{liveStats.test.alerts || "—"}</td><td>{liveStats.draw.alerts || "—"}</td></tr>
-              </tbody>
-            </table>
-            {liveMeta.since && (
+        {(() => {
+          const hv = histView();
+          if (!hv) return null;
+          return (
+            <div className="livecard">
+              <div className="livecard-h">Histórico comparativo · {hv.trips} {hv.trips === 1 ? "viaje" : "viajes"}</div>
+
+              {hv.pred && (
+                <>
+                  <div className="evalsub">Predicción — ¿aporta el modelo?</div>
+                  <table className="scn">
+                    <thead><tr><th></th><th>Modelo</th><th>Línea recta</th></tr></thead>
+                    <tbody>
+                      <tr><td>acierto ≤50 m</td><td><b>{hv.pred.model50}%</b></td><td>{hv.pred.base50}%</td></tr>
+                      <tr><td>error medio</td><td><b>{hv.pred.modelErr} m</b></td><td>{hv.pred.baseErr} m</td></tr>
+                    </tbody>
+                  </table>
+                  <div className="evalrow" style={{ color: "#86efac" }}>El modelo mejora <b>+{hv.pred.mejora} pp</b> sobre la línea recta ({hv.pred.n} predicciones).</div>
+                </>
+              )}
+
+              {hv.prot ? (
+                <>
+                  <div className="evalsub">Protección — ruta segura vs directa</div>
+                  <div className="evalbig">−{hv.prot.red}% <span>de exposición al riesgo</span></div>
+                  <div className="evalrow">promedio sobre {hv.prot.n} {hv.prot.n === 1 ? "ruta" : "rutas"} generadas</div>
+                </>
+              ) : (
+                <div className="evalrow" style={{ color: "var(--muted)" }}>Genera una «Ruta nueva» para medir la protección (segura vs directa).</div>
+              )}
+
               <div className="livecard-row" style={{ marginTop: 6, color: "var(--muted)" }}>
-                Desde {fmtDate(liveMeta.since)} · última {fmtDate(liveMeta.updated)}
+                Desde {hv.since} · última {hv.updated} · {hv.source === "db" ? "base de datos" : "solo este navegador"}
               </div>
-            )}
-            <div className="livecard-row" style={{ marginTop: 4 }}>Acumula entre sesiones (se guarda en este navegador). <a className="reset-link" onClick={resetLive}>Reiniciar histórico</a></div>
-          </div>
-        )}
+              <div className="livecard-row" style={{ marginTop: 2 }}>
+                <a className="reset-link" onClick={resetHist}>Reiniciar histórico</a>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="legend">
           <span className="leg"><span className="dot blue" /> capturado</span>
@@ -716,12 +811,15 @@ function HelpPanel({ onClose }: { onClose: () => void }) {
           <li><b>Escenarios:</b> el mismo experimento repetido por hora y umbral.</li>
         </ul>
 
-        <h3>Histórico de efectividad</h3>
-        <p>
-          Cada predicción durante una simulación se guarda y <b>se acumula entre sesiones</b> en este
-          navegador (con fecha de inicio y última actualización). Compara “No visto” vs “Ruta nueva”.
-          No se borra al limpiar el mapa; solo con <i>“Reiniciar histórico”</i>.
-        </p>
+        <h3>Histórico comparativo</h3>
+        <p>Cada viaje simulado guarda <b>dos comparaciones</b> y las acumula:</p>
+        <ul>
+          <li><b>Predicción:</b> el modelo <b>vs “seguir en línea recta”</b> — demuestra que el AI aporta.</li>
+          <li><b>Protección:</b> la <b>ruta segura vs la directa</b> — cuánta exposición al riesgo se evita.</li>
+        </ul>
+        <p>Se guarda en <b>base de datos</b> (persiste entre dispositivos y usuarios; base para el
+          producto). Si la base de datos no está configurada, cae a este navegador. No se borra al
+          limpiar el mapa; solo con <i>“Reiniciar histórico”</i>.</p>
 
         <h3>La consola “Actividad del sistema”</h3>
         <p>Son las <b>entradas y salidas del modelo en vivo</b> (lo que envía el teléfono, lo que predice
