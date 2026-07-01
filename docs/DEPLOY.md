@@ -71,21 +71,30 @@ python appNomadaAI/app/db/etl/load_corridors.py
 > OE1 (lo que está en producción) **no** usa la base de datos: el backend lee los artefactos
 > embebidos. Supabase se activa al construir OE2 (riesgo) y OE3 (ruteo).
 
-### Histórico de efectividad (comparativo, persistente)
+### Histórico de efectividad por usuario (comparativo, persistente · BI)
 
-El endpoint `/history` guarda **un registro por viaje simulado** con dos comparaciones —
-predicción (modelo vs línea recta) y protección (ruta segura vs directa) — y las agrega en
-`/history/summary`. La tabla `sim_effectiveness` se **crea sola** en el primer uso.
+El endpoint `/history` guarda **un registro por viaje simulado**, atado a un `user_id`, con dos
+comparaciones — predicción (modelo vs línea recta) y protección (ruta segura vs directa). Agrega
+por usuario o global en `/history/summary` y expone un panel BI en `/history/stats` (totales,
+por hora, por vehículo, por día). La tabla `sim_effectiveness` se **crea sola** en el primer uso.
 
-Para activarlo en el Space, define el secret **`DATABASE_URL`**:
+**Base de datos: Neon (Postgres gratuito).** Se eligió Neon porque **se reactiva solo** al
+conectarse (Supabase free se pausa a los 7 días de inactividad). Como el backend es Postgres puro
+(`psycopg` + `DATABASE_URL`), sirve cualquier Postgres sin cambiar código. Neon expone solo la
+cadena de conexión privada (no hay API pública anónima), así que la alerta de "tabla pública / RLS"
+de Supabase **no aplica**.
 
-1. HF Space → *Settings → Variables and secrets → New secret*.
-2. Nombre `DATABASE_URL`, valor = la *Connection string (URI)* de Supabase (usa el **pooler**
-   en el puerto `6543` para conexiones cortas; reemplaza `<password>`).
+El esquema ya está aplicado (ver `db/migrations/002_sim_effectiveness.sql`). Para activar la
+persistencia en el Space define el secret **`DATABASE_URL`**:
+
+1. HF Space `englergz/nomadaai` → *Settings → Variables and secrets → New secret*.
+2. Nombre `DATABASE_URL`, valor = la cadena de conexión de Neon (Dashboard → *Connection string*).
 3. Guardar y reiniciar el Space.
 
-Sin este secret la app funciona igual, pero el histórico cae a almacenamiento del navegador
-(no persiste entre dispositivos). Es **replicable a otra ciudad**: cambia la columna `city`.
+> ⚠️ La `DATABASE_URL` lleva contraseña: **solo** va como secret del Space, nunca en el repo.
+
+Sin este secret la app funciona igual, pero el histórico cae al navegador (no persiste entre
+dispositivos). Es **replicable a otra ciudad**: cambia la columna `city`.
 
 ## 4. (Opcional) Auto-deploy desde GitHub
 
