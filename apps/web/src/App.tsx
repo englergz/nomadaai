@@ -123,6 +123,7 @@ export default function App() {
   const typeRef = useRef("car");
   const excludeRef = useRef<string | null>(null);
   const clockRef = useRef(0);
+  const hourRef = useRef(20);
   const speedRef = useRef(8.3);
   const scaleRef = useRef(60);
   const thrRef = useRef(0.7);
@@ -182,6 +183,7 @@ export default function App() {
   const vehIcon = iconForType(vehType);
 
   useEffect(() => { thrRef.current = threshold / 100; }, [threshold]);
+  useEffect(() => { hourRef.current = hour; }, [hour]);
   useEffect(() => { scaleRef.current = timeScale; }, [timeScale]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { document.body.className = theme === "light" ? "light" : ""; }, [theme]);
@@ -380,11 +382,27 @@ export default function App() {
       } catch (e) { console.error("pois:", e); }
 
       map.on("click", "risk-fill", (e) => {
+        // El lugar (POI) tiene prioridad: si hay uno bajo el clic, no tapamos con la zona.
+        if (map.getLayer("pois") && map.getLayoutProperty("pois", "visibility") === "visible") {
+          const hits = map.queryRenderedFeatures(e.point, { layers: ["pois"] });
+          if (hits.length) return;
+        }
         const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
         if (!p) return;
-        const ll = `${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`;
-        new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat)
-          .setHTML(`<b>Zona ${p.cell_id}</b><br/>Riesgo: ${p.risk} (${Math.round(Number(p.risk_norm) * 100)}%)<br/>Nivel: ${p.level}<br/>Centroide: ${Number(p.lat).toFixed(6)}, ${Number(p.lon).toFixed(6)}<br/>Clic: ${ll}`).addTo(map);
+        const nivel = String(p.level);
+        const color = nivel === "alto" ? "#ef4444" : nivel === "medio" ? "#f97316" : "#16a34a";
+        const pob = p.poblacion != null ? Number(p.poblacion).toLocaleString() : "—";
+        const act = p.actividad != null ? Number(p.actividad).toLocaleString() : "—";
+        new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font-size:12px;line-height:1.5">`
+            + `<b>Zona ${p.cell_id}</b> · <span style="color:${color};font-weight:700">riesgo ${nivel}</span><br/>`
+            + `Índice de exposición: <b>${Math.round(Number(p.risk_norm) * 100)}%</b> (hora ${String(hourRef.current).padStart(2, "0")}:00)<br/>`
+            + `👥 Población (DANE 2018): <b>${pob}</b><br/>`
+            + `🚗 Actividad (tráfico): <b>${act}</b><br/>`
+            + `<span style="color:#8b98a5">Centroide ${Number(p.lat).toFixed(5)}, ${Number(p.lon).toFixed(5)}</span>`
+            + `</div>`,
+          ).addTo(map);
       });
       map.on("click", (e) => {
         if (modeRef.current !== "draw" || runningRef.current) return;

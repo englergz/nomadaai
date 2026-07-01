@@ -62,6 +62,17 @@ class RiskStore:
         self.max_risk = max_risk or 1.0
         self.n_zones = len({c for rows in self._by_hour.values() for (c, *_3) in rows})
 
+        # Metadatos por zona (población DANE real, actividad) para enriquecer el popup.
+        self._meta: dict[str, dict] = {}
+        meta_path = csv_path.parent / "tumaco_zonas_riesgo_v2.csv"
+        if meta_path.exists():
+            with open(meta_path, newline="") as f:
+                for row in csv.DictReader(f):
+                    self._meta[row["cell_id"]] = {
+                        "poblacion": int(float(row.get("poblacion_dane", 0) or 0)),
+                        "actividad": int(float(row.get("n_points", 0) or 0)),
+                    }
+
         # Tamaño de celda de la malla (para dibujar zonas discretas como polígonos):
         # mínima separación positiva entre centroides en lon y lat.
         sample = self._by_hour.get(0) or next(iter(self._by_hour.values()), [])
@@ -94,6 +105,8 @@ class RiskStore:
                     "risk": round(r, 2),
                     "risk_norm": round(rn, 4),
                     "level": _level(rn),
+                    "poblacion": self._meta.get(cid, {}).get("poblacion"),
+                    "actividad": self._meta.get(cid, {}).get("actividad"),
                 },
             })
         return {"type": "FeatureCollection", "features": feats, "hour": hour}
