@@ -10,7 +10,7 @@
 |----|----------------------------|--------|--------------------|
 | **OE1** | Modelo de IA que predice el destino, **precisión > 85%** | ✅ **Superado** | **90% acierto ≤50 m** (held-out, no visto), error mediano ~8 m. Validado con **comparación de 3 vías**: el modelo (k-vecinos+rumbo) supera al baseline ingenuo (línea recta, +~18 pp) y a una **cadena de Markov que aprende transiciones** — así se justifica la elección del método, no solo la meta. Ver `MODELO_PREDICCION.md`, `/trajectories/evaluate`. |
 | OE1 | Informe de caracterización (calidad, patrones) | 🟡 | Caracterización hecha (TrajCL, TRACLUS, Fréchet); falta redactarla como "informe" formal en la tesis. |
-| **OE2** | Modelo de IA de riesgo, **precisión > 85%** | ⚠️ **Vacío clave** | El riesgo es un **índice compuesto (RTM)** fundamentado, **no un predictor validado**: no hay precisión medida porque falta **microdato de delito georreferenciado (DIJIN)** para calibrar/validar (RTM/PAI). Hoy no se puede afirmar el 85%. |
+| **OE2** | Modelo de IA de riesgo, **precisión > 85%** | 🟡 **Validable con lo que hay** | El anteproyecto **no** compromete microdato DIJIN: el objetivo general es sobre **datos simulados** y OE2 dice *"identifique y **simule** eventos… con análisis de datos históricos… reportes policiales y denuncias"* (genérico). El riesgo es un **índice RTM** construido con **datos reales abiertos** (homicidios datos.gov.co georreferenciados, DANE, TerriData). **Acción para el 85%:** validar el mapa RTM contra los **homicidios georreferenciados** que ya se tienen (¿las zonas de alto riesgo capturan dónde ocurrieron? → precisión/recall/F1). El microdato **DIJIN es un *plus*** (petición ya radicada), no un requisito. |
 | OE2 | Informe de datos de riesgo (calidad, patrones) | 🟡 | Variables reales integradas (TerriData IPM, servicios); incidentes a nivel **municipal**, no punto; socioeconómico **municipal/urbano-rural**, no manzana. |
 | **OE3** | Sistema de **recomendación de rutas seguras** (minimiza exposición), **~69%** + tiempo real | ✅ **Cumplido** | **Alerta anticipada** (88.7%) + ruteo **direccional, por tipo y ponderado por riesgo**: `/route/build` calcula el **desvío que minimiza la exposición** y lo compara con la ruta directa (`risk_weight` = λ). |
 | OE3 | Panel con **≥3 capas** (riesgo, POIs, rutas) | ✅ **Cumplido** | Riesgo + ruta segura + ruta directa + recorrido + corredores + **capa de POIs** (OSM: policía, salud, educación, transporte…; `/pois`, toggle "Lugares"). Supera las 3 capas con puntos de interés. |
@@ -30,10 +30,10 @@
 
 ## Vacíos críticos (lo que falta, por prioridad)
 
-1. **Validación del modelo de riesgo (OE2, el más sensible).** Sin microdato DIJIN no hay precisión
-   medida del riesgo. *Acciones:* (a) gestionar el microdato (oficio en `data_sources/`); (b) mientras
-   tanto, declarar el riesgo como **índice teórico-fundamentado** y validar la **calibración de pesos**
-   por análisis de sensibilidad (ya hecho), no como "predictor 85%".
+1. **Validación del modelo de riesgo (OE2).** *No depende de DIJIN* (el anteproyecto no lo compromete).
+   *Acción concreta:* validar el mapa RTM contra los **homicidios georreferenciados abiertos** ya
+   disponibles (precisión/recall/F1 de "zona de alto riesgo" vs. hechos reales). DIJIN (petición ya
+   radicada) sería granularidad extra, no un bloqueante.
 2. ~~Ruteo ponderado por riesgo (OE3).~~ ✅ **HECHO:** `/route/build` calcula la ruta segura con
    `peso = distancia·(1+λ·riesgo)` sobre el grafo dirigido y la compara con la directa
    (reducción de exposición). Pendiente menor: correr el proxy de OE4 sobre un set de O-D y reportarlo.
@@ -54,9 +54,12 @@
 
 > Lo que falta para poder marcar cada indicador como ✅ y pasar a **documentar**. Ordenado por impacto.
 
-- [ ] **OE2 — validación del riesgo.** Gestionar microdato DIJIN (oficio). Sin él: declarar el riesgo
-      como **índice teórico-fundamentado** + reportar el **análisis de sensibilidad de pesos** como
-      "validación de la calibración" (no como precisión 85%). *(Es el vacío #1.)*
+- [ ] **OE2 — validación del riesgo (SIN depender de DIJIN).** Validar el mapa RTM contra los
+      **homicidios georreferenciados abiertos** (datos.gov.co) que ya se tienen: ¿coinciden las zonas
+      de alto riesgo con los hechos reales? → reportar **precisión/recall/F1** del mapa de riesgo.
+      El anteproyecto lo permite (habla de "análisis de datos históricos" y "eventos simulados", no de
+      DIJIN). El microdato DIJIN (petición radicada) sería un refuerzo de mayor granularidad, no un
+      requisito para cerrar OE2.
 - [ ] **OE4 — barrido O-D del proxy.** Correr la ruta segura vs. directa sobre un conjunto fijo de
       ~30–50 pares origen-destino y reportar la **reducción media de exposición** (el motor ya la
       calcula; falta el script batch y la tabla). Cierra el indicador de "≥30%".
