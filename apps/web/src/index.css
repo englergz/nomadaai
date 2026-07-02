@@ -234,7 +234,7 @@ body.light .push-time { color: #b91c1c; }
 .help-btn { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; }
 
 /* Banner informativo flotante al centro-superior del mapa */
-.banner { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); z-index: 20; display: flex; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: min(560px, 70vw); pointer-events: none; }
+.banner { position: absolute; top: 66px; left: calc(50% + 160px); transform: translateX(-50%); z-index: 12; display: flex; flex-direction: column; gap: 6px; align-items: center; width: max-content; max-width: min(520px, 52vw); pointer-events: none; }
 .banner-line { background: color-mix(in srgb, var(--panel) 94%, transparent); color: var(--text); border: 1px solid var(--border); border-radius: 999px; padding: 9px 18px; font-size: 13px; font-weight: 500; text-align: center; box-shadow: 0 8px 28px rgba(0,0,0,0.4); }
 .banner-line.loading { border-color: var(--accent); }
 .banner-line.ok { background: rgba(22,163,74,0.16); border-color: #16a34a; color: #bbf7d0; }

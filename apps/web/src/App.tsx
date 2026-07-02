@@ -119,6 +119,7 @@ export default function App() {
   const timerRef = useRef<number | null>(null);
   const lastPredRef = useRef(0);
   const lastCellRef = useRef("");
+  const alertedCellsRef = useRef<Set<string>>(new Set()); // zonas ya avisadas (una vez por viaje)
   const runningRef = useRef(false);
   const typeRef = useRef("car");
   const excludeRef = useRef<string | null>(null);
@@ -561,7 +562,7 @@ export default function App() {
     setPredInfo("Detectando movimiento…");
     tripAggRef.current = emptyTripAgg();
     tripMetaRef.current = { mode: modeRef.current, vehicle: typeRef.current, hour };
-    lastPredRef.current = 0; lastCellRef.current = ""; distRef.current = 0;
+    lastPredRef.current = 0; lastCellRef.current = ""; distRef.current = 0; alertedCellsRef.current.clear();
     clockRef.current = hour * 3600; setClock(clockRef.current);
 
     const cum = [0];
@@ -649,7 +650,8 @@ export default function App() {
           pushLog(`← riesgo: zona ${a.cell_id} · ${(a.risk_norm * 100).toFixed(0)}% · d=${a.distance_m.toFixed(0)} m · llegada ${String(a.hour).padStart(2, "0")}:${String(a.arrival_min ?? 0).padStart(2, "0")} · ${a.is_high ? "ALTO" : "ok"}`);
           if (a.is_high) {
             setPoint(map, "danger", [a.lon, a.lat]);
-            if (a.cell_id && a.cell_id !== lastCellRef.current) {
+            if (a.cell_id && !alertedCellsRef.current.has(a.cell_id)) {
+              alertedCellsRef.current.add(a.cell_id);  // esta zona ya avisó: no repetir
               lastCellRef.current = a.cell_id;
               tripAggRef.current.alerts += 1;
               const id = ++notifIdRef.current;
