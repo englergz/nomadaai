@@ -694,7 +694,7 @@ export default function App() {
         <button className={poisOn ? "on" : ""} onClick={() => togglePois(!poisOn)}>{poisOn ? "📍 Lugares: ON" : "📍 Lugares: OFF"}</button>
         <button className={follow ? "on" : ""} onClick={() => setFollow(!follow)}>{follow ? "🎯 Seguir: ON" : "🧭 Seguir: OFF"}</button>
         <button className="help-btn" onClick={() => setShowHelp(true)} title="¿Cómo funciona?" aria-label="Ayuda">?</button>
-        {CLERK_ENABLED && <AuthBar onUser={setAuthUid} setGetToken={(fn) => { authGetTokenRef.current = fn; }} />}
+        {CLERK_ENABLED && !(window as unknown as { __CLERK_OFF__?: boolean }).__CLERK_OFF__ && <AuthBar onUser={setAuthUid} setGetToken={(fn) => { authGetTokenRef.current = fn; }} />}
       </div>
 
       {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
