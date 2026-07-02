@@ -11,6 +11,7 @@ import { api } from "./lib/api";
 import { osmStyle, TUMACO_CENTER, TUMACO_ZOOM } from "./lib/mapStyle";
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const DAYS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 const TIME_SCALES = [
   { v: 1, label: "Tiempo real (×1)" }, { v: 5, label: "×5" }, { v: 15, label: "×15" },
   { v: 30, label: "×30" }, { v: 60, label: "×60" }, { v: 120, label: "×120" },
@@ -139,6 +140,8 @@ export default function App() {
   const [mode, setMode] = useState<"test" | "draw">("test");
   const [drawVeh, setDrawVeh] = useState("");
   const [hour, setHour] = useState(20);
+  const [day, setDay] = useState<number>(() => (new Date().getDay() + 6) % 7); // 0=lun … 6=dom
+  const dayRef = useRef((new Date().getDay() + 6) % 7);
   const [threshold, setThreshold] = useState(70);
   const [riskWeight, setRiskWeight] = useState(50); // prioridad de seguridad (0-100) → λ
   const [safeMsg, setSafeMsg] = useState<string>("");
@@ -186,6 +189,7 @@ export default function App() {
 
   useEffect(() => { thrRef.current = threshold / 100; }, [threshold]);
   useEffect(() => { hourRef.current = hour; }, [hour]);
+  useEffect(() => { dayRef.current = day; if (mapRef.current) loadRisk(mapRef.current, hour, day); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [day]);
   useEffect(() => { scaleRef.current = timeScale; }, [timeScale]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { document.body.className = theme === "light" ? "light" : ""; applyBase(sat, theme); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [theme]);
@@ -442,9 +446,9 @@ export default function App() {
     } catch (e) { console.error(e); }
   }
 
-  async function loadRisk(map: maplibregl.Map, h: number) {
+  async function loadRisk(map: maplibregl.Map, h: number, d: number = dayRef.current) {
     try {
-      const data = await fetch(`${base()}/risk/zones?hour=${h}`).then((r) => r.json());
+      const data = await fetch(`${base()}/risk/zones?hour=${h}&day=${d}`).then((r) => r.json());
       (map.getSource("risk") as maplibregl.GeoJSONSource | undefined)?.setData(data);
     } catch (e) { console.error("risk:", e); }
   }
@@ -673,7 +677,7 @@ export default function App() {
     const body: Record<string, unknown> = {
       points: acc.map(([lon, lat], i) => ({ lon, lat, t: i })),
       type: typeRef.current, t_seconds: clockRef.current,
-      speed_mps: speedRef.current, threshold: thrRef.current, topk: 1,
+      speed_mps: speedRef.current, threshold: thrRef.current, topk: 1, day: dayRef.current,
     };
     if (excludeRef.current) body.exclude_id = excludeRef.current;
     const r = await fetch(`${base()}/predict/online`, {
@@ -752,10 +756,15 @@ export default function App() {
           </>
         )}
 
-        <label className="lbl">Hora de salida (riesgo dinámico)</label>
-        <select className="select" value={hour} onChange={(e) => { const h = Number(e.target.value); setHour(h); if (mapRef.current) loadRisk(mapRef.current, h); }} disabled={running}>
-          {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
-        </select>
+        <label className="lbl">Día y hora de salida (riesgo dinámico)</label>
+        <div className="row" style={{ marginTop: 0 }}>
+          <select className="select" value={day} onChange={(e) => setDay(Number(e.target.value))} disabled={running}>
+            {DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+          </select>
+          <select className="select" value={hour} onChange={(e) => { const h = Number(e.target.value); setHour(h); if (mapRef.current) loadRisk(mapRef.current, h); }} disabled={running}>
+            {HOURS.map((h) => <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>)}
+          </select>
+        </div>
 
         <label className="lbl">Velocidad del reloj</label>
         <select className="select" value={timeScale} onChange={(e) => setTimeScale(Number(e.target.value))}>

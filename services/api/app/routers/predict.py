@@ -66,6 +66,7 @@ def predict_online(
             start_seconds=start_seconds,
             threshold_norm=req.threshold,
             speed_mps=req.speed_mps,
+            day=req.day,
         )
         if a is not None:
             alert = RiskAlert(**a)

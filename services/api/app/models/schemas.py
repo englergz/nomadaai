@@ -49,6 +49,7 @@ class OnlineRequest(BaseModel):
     points: list[TrajectoryPoint] = Field(..., min_length=2)
     type: Optional[str] = None
     hour: int = Field(default=19, ge=0, le=23)
+    day: Optional[int] = Field(default=None, ge=0, le=6)  # 0=lun … 6=dom
     # Reloj de la simulación: segundos desde medianoche en la posición ACTUAL.
     # Si se envía, el riesgo se evalúa a la hora de llegada a cada zona.
     t_seconds: Optional[float] = Field(default=None, ge=0, le=86400)

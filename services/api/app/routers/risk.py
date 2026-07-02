@@ -12,10 +12,11 @@ router = APIRouter(tags=["risk"])
 @router.get("/risk/zones")
 def risk_zones(
     hour: int = Query(19, ge=0, le=23, description="Hora del día (0-23)"),
+    day: int | None = Query(None, ge=0, le=6, description="Día de la semana (0=lun … 6=dom)"),
     risk: RiskStore = Depends(get_risk),
 ) -> dict:
-    """Zonas de riesgo a una hora dada (OE2): riesgo espacio-temporal por zona."""
-    fc = risk.zones_geojson(hour)
+    """Zonas de riesgo por hora y día (OE2): riesgo espacio-temporal por zona."""
+    fc = risk.zones_geojson(hour, day)
     fc["max_risk"] = round(risk.max_risk, 2)
     return fc
 

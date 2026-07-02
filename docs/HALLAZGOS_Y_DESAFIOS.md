@@ -9,22 +9,29 @@
 | Desafío (hallazgo) | Evidencia | Alternativa/técnica aplicada | Respaldo |
 |--------------------|-----------|------------------------------|----------|
 | **No hay microdato de delito georreferenciado** | datos.gov.co (`m8fd-ahd9`) solo trae municipio + urbano/rural, sin coordenadas ni hora | **Risk Terrain Modeling**: modelar el riesgo con **factores del territorio**, no con incidentes | Caplan & Kennedy (2011) |
-| **Homogeneidad socioeconómica** (sin gradiente) | Censo DANE: **99% estrato 1** en Tumaco | Descartar el estrato (no discrimina) y usar **densidad + periferia + guardián + actividad** | Shaw & McKay (1942) |
+| **Homogeneidad socioeconómica** (sin gradiente) | Censo DANE 2018: **893 de 1 136 manzanas estrato 1; 99,1% de la población es estrato 1** (11 manzanas estrato 2, 2 estrato 3, 1 estrato 4). CEDRE 2024: 83% de hogares estrato 1 | El estrato **no discrimina** → se descarta y se usan **densidad + periferia + guardián + actividad** | Shaw & McKay (1942); CEDRE 2024 |
 | **Malla incompleta** (grillas faltantes sobre viviendas) | la malla venía de trayectorias SUMO | Reconstruir la malla desde las **manzanas censales DANE** (cobertura completa, 475 celdas) | DANE CNPV 2018 |
 | **Distribución sesgada** (mapa "todo verde/rojo") | dividir por el máximo aplastaba el rango | **Normalización por percentil** espacial + factores en percentil | (método) |
-| **Sin dato de hora del delito** | `fecha_hecho` sin hora | Derivar el **día de la semana real** (dato) y declarar la curva horaria como **supuesto/escenario** | análisis propio + Forensis (INMLCF) |
+| **Sin dato de hora del delito (local)** | `fecha_hecho` sin hora | **Día** = dato propio (dom/lun picos); **hora** = patrón nacional publicado (18-24h pico) | CEJ *Reloj de la Criminalidad* 2019 · INMLCF |
 | **OSM sin iluminación** | 0 luminarias, 0 `lit` en Tumaco | Pendiente: **luces nocturnas satelitales (VIIRS)** como proxy real | Welsh & Farrington (2008) |
 | **Validación sin verdad-terreno** | no hay incidentes punto a punto | Caracterización real + **análisis de sensibilidad** (robustez ρ≈0,99) + **reporte ciudadano** futuro | Arteaga Botello (2005) |
 
-## 2. Patrón temporal: lo real vs. el supuesto
+## 2. Patrón temporal: DÍA × HORA, ambos respaldados (no supuestos)
 
-- **Real (dato):** homicidios de Tumaco por **día de la semana** (n=4 045, Policía Nacional):
-  **domingo 19,7%** y **lunes 16,8%** son los picos; martes el más bajo (10,9%). *Existe* una
-  concentración temporal medible. Ver `img/homicidios_dia_semana.png`.
-- **Supuesto (declarado):** la **curva por hora** (pico tarde-noche) **no** está calibrada con dato —
-  se presenta como **parámetro de escenario**, con piso nocturno (la violencia no se anula de
-  madrugada). El patrón "tarde/noche y fin de semana" es consistente con la literatura (Forensis,
-  INMLCF), pero no afirmamos una forma horaria exacta. **Honestidad = fortaleza**, no debilidad.
+El riesgo se modula por **día de la semana** y **hora**, cada uno con soporte:
+
+- **Día — dato propio + cita:** homicidios de Tumaco por día (n=4 045, Policía Nacional / datos.gov.co):
+  **domingo 19,7%** y **lunes 16,8%** = picos; martes el más bajo (10,9%). Coincide con la **CEJ
+  "Reloj de la Criminalidad" (2019)**: *el domingo es el día con más homicidios en Colombia*. Doble
+  respaldo. Ver `img/homicidios_dia_semana.png`.
+- **Hora — cita:** **CEJ Reloj de la Criminalidad (2019)** + **INMLCF/Medicina Legal**: los homicidios
+  se concentran **18:00–23:59 (hasta 2× el promedio)**, con pico tarde-noche; menor en la
+  madrugada/mañana. La curva horaria del sistema **reproduce ese patrón citado** (pico ~20:00), no es
+  una suposición propia. `DAY_FACTOR` y `HOUR_REL` documentan la fuente en el código.
+
+Así, la afirmación "a las 20:00 hay más riesgo que a las 03:00" **está sostenida por fuente**, no por
+nosotros. Lo único no calibrable con dato local exacto (la forma hora-a-hora precisa *en Tumaco*) se
+toma del patrón nacional publicado — que es lo correcto cuando no hay microdato municipal.
 
 ## 3. El modelo de riesgo (antes → después)
 

@@ -29,6 +29,12 @@ def _min_step(vals: list[float]) -> float:
     return step or 0.002  # ~200 m de respaldo
 
 
+# Factor por DÍA de la semana (0=lun … 6=dom). Respaldo: dato real de homicidios de Tumaco
+# (Policía, datos.gov.co: domingo 19,7% y lunes 16,8% = picos) + CEJ "Reloj de la Criminalidad"
+# 2019 (domingo el día con más homicidios). Normalizado al pico (domingo = 1,0).
+DAY_FACTOR = {0: 0.85, 1: 0.55, 2: 0.63, 3: 0.62, 4: 0.67, 5: 0.75, 6: 1.0}
+
+
 def _level(risk_norm: float) -> str:
     # Calibrado para que "alto" sean los HOTSPOTS (minoría) y la ciudad se pueda transitar:
     # con risk_norm = percentil, en el pico ~10% alto / ~20% medio / ~70% bajo.
@@ -102,19 +108,23 @@ class RiskStore:
         self.dlon = _min_step(lons)
         self.dlat = _min_step(lats)
 
-    def _risk_norm(self, cid: str, hour: int) -> float:
-        """Riesgo normalizado 0-1: percentil espacial modulado por la hora (mín 0.5 del efecto)."""
+    def _risk_norm(self, cid: str, hour: int, day: int | None = None) -> float:
+        """Riesgo normalizado 0-1 = percentil espacial × factor HORA (CEJ 2019) × factor DÍA (dato
+        real + CEJ). Si `day` es None, no se modula por día."""
         sp = self._sp.get(cid, 0.0)
         tf = self._tf.get(int(hour) % 24, 1.0)
-        return sp * (0.5 + 0.5 * tf)
+        rn = sp * (0.5 + 0.5 * tf)
+        if day is not None:
+            rn *= 0.7 + 0.3 * DAY_FACTOR.get(int(day) % 7, 1.0)
+        return rn
 
     # --- mapa: zonas discretas (polígonos cuadrados) con riesgo por hora ---
-    def zones_geojson(self, hour: int) -> dict:
+    def zones_geojson(self, hour: int, day: int | None = None) -> dict:
         hour = int(hour) % 24
         hx, hy = self.dlon / 2, self.dlat / 2
         feats = []
         for (cid, lon, lat, r) in self._by_hour.get(hour, []):
-            rn = self._risk_norm(cid, hour)
+            rn = self._risk_norm(cid, hour, day)
             feats.append({
                 "type": "Feature",
                 "geometry": {
@@ -139,7 +149,7 @@ class RiskStore:
         return {"type": "FeatureCollection", "features": feats, "hour": hour}
 
     # --- consulta puntual (zona más cercana) ---
-    def risk_at(self, lon: float, lat: float, hour: int) -> tuple[float, float, str]:
+    def risk_at(self, lon: float, lat: float, hour: int, day: int | None = None) -> tuple[float, float, str]:
         """Devuelve (riesgo, riesgo_norm, cell_id) en la zona más cercana al punto."""
         rows = self._by_hour.get(int(hour) % 24, [])
         best_r, best_d, best_c = 0.0, float("inf"), ""
@@ -147,7 +157,7 @@ class RiskStore:
             d = _haversine_m((lon, lat), (zlon, zlat))
             if d < best_d:
                 best_d, best_r, best_c = d, r, c
-        return best_r, self._risk_norm(best_c, hour), best_c
+        return best_r, self._risk_norm(best_c, hour, day), best_c
 
     # --- alerta anticipada (look-ahead) ---
     def lookahead_alert(
@@ -156,6 +166,7 @@ class RiskStore:
         start_seconds: float,      # segundos desde medianoche en la posición actual
         threshold_norm: float = 0.7,
         speed_mps: float = 8.3,    # ~30 km/h por defecto (configurable)
+        day: int | None = None,    # día de la semana (0=lun … 6=dom)
     ) -> dict | None:
         """Alerta anticipada con reloj corriendo: el riesgo de cada zona se evalúa a la
         HORA ESTIMADA DE LLEGADA (no a una hora fija). Devuelve la primera zona que supere
@@ -172,7 +183,7 @@ class RiskStore:
             eta_s = acc / speed_mps if speed_mps else 0.0
             arrival_s = start_seconds + eta_s
             arrival_hour = int(arrival_s // 3600) % 24
-            r, rn, cid = self.risk_at(pt[0], pt[1], arrival_hour)
+            r, rn, cid = self.risk_at(pt[0], pt[1], arrival_hour, day)
             info = {
                 "lon": pt[0],
                 "lat": pt[1],

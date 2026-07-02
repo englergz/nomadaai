@@ -117,6 +117,7 @@ def demo(
     tid: str,
     topk: int = Query(3, ge=1, le=10),
     hour: int = Query(19, ge=0, le=23, description="Hora del día para el riesgo"),
+    day: int | None = Query(None, ge=0, le=6, description="Día de la semana (0=lun … 6=dom)"),
     predictor: DestinationPredictor = Depends(get_predictor),
 ) -> dict:
     """Prefijo observado (75%) + predicción + recorrido real + alerta anticipada de riesgo."""
@@ -124,12 +125,12 @@ def demo(
     if d is None:
         raise HTTPException(status_code=404, detail=f"Viaje '{tid}' no encontrado")
     # Alerta anticipada (OE3): mira la ruta predicha y avisa de la primera zona
-    # de riesgo alto ANTES de alcanzarla, evaluada a la hora indicada.
+    # de riesgo alto ANTES de alcanzarla, evaluada a la hora y día indicados.
     d["hour"] = hour
     d["alert"] = None
     if state.risk is not None and d.get("candidates"):
         d["alert"] = state.risk.lookahead_alert(
-            d["candidates"][0]["coordinates"], start_seconds=hour * 3600
+            d["candidates"][0]["coordinates"], start_seconds=hour * 3600, day=day
         )
     return d
 
