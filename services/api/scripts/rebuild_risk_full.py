@@ -33,9 +33,10 @@ MARGIN = 6  # celdas de margen alrededor del área con trayectorias (evita traer
 
 # Pesos del índice (editables por CLI). Reflejan una hipótesis criminológica para Tumaco:
 # densidad (exposición/actividades rutinarias) + periferia/aislamiento (baja vigilancia, corredores).
-W_DENS = 0.40    # densidad poblacional (DANE)
-W_EXPO = 0.25    # actividad/tráfico
-W_PERIPH = 0.35  # periferia/aislamiento
+W_DENS = 0.35    # densidad poblacional (DANE)
+W_EXPO = 0.20    # actividad/tráfico
+W_PERIPH = 0.30  # periferia/aislamiento
+W_POLICE = 0.15  # lejanía de estación de policía (guardián capaz, Cohen & Felson 1979)
 NIGHT_FLOOR = 0.5  # piso de la curva temporal (la violencia no se anula de madrugada)
 
 
@@ -54,6 +55,17 @@ def to4326(x, y):
 def minmax(xs):
     lo, hi = min(xs), max(xs)
     return [(v - lo) / (hi - lo) if hi > lo else 0.0 for v in xs]
+
+
+def pctile(xs):
+    """Cada valor → su percentil [0,1]. Así todos los factores quedan uniformes y los PESOS
+    controlan la influencia real (no la varianza de cada factor)."""
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    r = [0.0] * len(xs)
+    n = len(xs) or 1
+    for rank, i in enumerate(order):
+        r[i] = (rank + 1) / n
+    return r
 
 
 def pearson(a, b):
@@ -75,6 +87,25 @@ def centroid(geom):
         return None
     n = len(pts)
     return (sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n)
+
+
+def fetch_police():
+    """Estaciones de policía → (x,y) en 3857. Lee el archivo bundleado (por ciudad); si no,
+    consulta OSM. Factor 'guardián capaz' (Cohen & Felson, 1979)."""
+    pf = ART / "tumaco_police.json"
+    if pf.exists():
+        pts = json.loads(pf.read_text(encoding="utf-8"))
+        return [to3857(p["lon"], p["lat"]) for p in pts]
+    ql = '[out:json][timeout:60];node["amenity"="police"](1.75,-78.83,1.86,-78.70);out body;'
+    for ep in ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"):
+        try:
+            req = urllib.request.Request(ep + "?" + urllib.parse.urlencode({"data": ql}),
+                                         headers={"User-Agent": "NomadaAI-academic/1.0"})
+            els = json.load(urllib.request.urlopen(req, timeout=90)).get("elements", [])
+            return [to3857(e["lon"], e["lat"]) for e in els if "lat" in e]
+        except Exception as e:  # noqa: BLE001
+            print("  policía falló:", e)
+    return []
 
 
 def fetch_manzanas():
@@ -135,13 +166,25 @@ def main():
     # periféricas y de baja vigilancia tienden a mayor violencia dirigida (Jacobs 1961 'ojos en la
     # calle'; Newman 1972 espacio defendible; CEDRE 2024: corredores/débil presencia estatal en la
     # periferia). Contrapesa el sesgo de "solo el centro concurrido es riesgoso".
+    # coordenadas 3857 del centro de cada celda
+    cxy = [(x0 + (ix + 0.5) * CELL, y0 + (iy + 0.5) * CELL) for (ix, iy) in cells]
     tot_p = sum(P) or 1.0
-    cx = sum(cells[i][0] * P[i] for i in range(len(cells))) / tot_p
-    cy = sum(cells[i][1] * P[i] for i in range(len(cells))) / tot_p
-    periph = [((cells[i][0] - cx) ** 2 + (cells[i][1] - cy) ** 2) ** 0.5 for i in range(len(cells))]
+    cx = sum(cxy[i][0] * P[i] for i in range(len(cells))) / tot_p
+    cy = sum(cxy[i][1] * P[i] for i in range(len(cells))) / tot_p
+    periph = [((cxy[i][0] - cx) ** 2 + (cxy[i][1] - cy) ** 2) ** 0.5 for i in range(len(cells))]
 
-    nd, na, npf = minmax(P), minmax(A), minmax(periph)
-    idx = [round(100 * (W_DENS * nd[i] + W_EXPO * na[i] + W_PERIPH * npf[i]), 2) for i in range(len(cells))]
+    # Distancia a la estación de policía más cercana (lejanía = menor guardián capaz = ↑ riesgo).
+    police = fetch_police()
+    print(f"Estaciones de policía (OSM): {len(police)}")
+    if police:
+        nopol = [min(((cxy[i][0] - px) ** 2 + (cxy[i][1] - py) ** 2) ** 0.5 for (px, py) in police)
+                 for i in range(len(cells))]
+    else:
+        nopol = [0.0] * len(cells)
+
+    nd, na, npf, npo = pctile(P), pctile(A), pctile(periph), pctile(nopol)
+    idx = [round(100 * (W_DENS * nd[i] + W_EXPO * na[i] + W_PERIPH * npf[i] + W_POLICE * npo[i]), 2)
+           for i in range(len(cells))]
 
     order = sorted(range(len(idx)), key=lambda i: idx[i])
     lvl = [""] * len(idx)
@@ -150,8 +193,9 @@ def main():
         lvl[i] = "alto" if q >= 0.85 else ("medio" if q >= 0.50 else "bajo")
 
     from collections import Counter
-    print(f"pesos: densidad={W_DENS} actividad={W_EXPO} periferia={W_PERIPH}")
-    print(f"corr(índice, población)={pearson(idx, P):.3f} · tráfico={pearson(idx, A):.3f} · periferia={pearson(idx, periph):.3f}")
+    print(f"pesos: densidad={W_DENS} actividad={W_EXPO} periferia={W_PERIPH} lejaníaPolicía={W_POLICE}")
+    print(f"corr(índice): población={pearson(idx, P):.3f} tráfico={pearson(idx, A):.3f} "
+          f"periferia={pearson(idx, periph):.3f} lejaníaPolicía={pearson(idx, nopol):.3f}")
     print(f"niveles: {dict(Counter(lvl))}")
 
     # centroides lon/lat de cada celda
@@ -193,9 +237,10 @@ if __name__ == "__main__":
     ap.add_argument("--w-dens", type=float, default=W_DENS, help="peso densidad poblacional")
     ap.add_argument("--w-expo", type=float, default=W_EXPO, help="peso actividad/tráfico")
     ap.add_argument("--w-periph", type=float, default=W_PERIPH, help="peso periferia/aislamiento")
+    ap.add_argument("--w-police", type=float, default=W_POLICE, help="peso lejanía de policía")
     ap.add_argument("--night-floor", type=float, default=NIGHT_FLOOR, help="piso de la curva temporal (0-1)")
     a = ap.parse_args()
-    s = (a.w_dens + a.w_expo + a.w_periph) or 1.0
-    W_DENS, W_EXPO, W_PERIPH = a.w_dens / s, a.w_expo / s, a.w_periph / s  # normalizados
+    s = (a.w_dens + a.w_expo + a.w_periph + a.w_police) or 1.0
+    W_DENS, W_EXPO, W_PERIPH, W_POLICE = a.w_dens / s, a.w_expo / s, a.w_periph / s, a.w_police / s
     NIGHT_FLOOR = a.night_floor
     main()

@@ -40,10 +40,17 @@ servicio Esri Colombia; 65 568 hab.) y se reconstruyó el índice como combinaci
 
 - **Densidad poblacional (0,40)** — exposición / actividades rutinarias (Cohen & Felson, 1979; Brender, 2012).
 - **Actividad/tráfico (0,25)** — concurrencia.
-- **Periferia / aislamiento (0,35)** — las zonas periféricas, aisladas y de baja vigilancia tienden a
+- **Periferia / aislamiento (0,30)** — las zonas periféricas, aisladas y de baja vigilancia tienden a
   mayor violencia **dirigida** (Jacobs, 1961, "ojos en la calle"; Newman, 1972, espacio defendible;
   CEDRE, 2024: corredores y débil presencia estatal en la periferia). Contrapesa el sesgo de "solo el
   centro concurrido es riesgoso" — coherente con el perfil de sicariato de Tumaco.
+- **Lejanía de policía (0,15)** — menor "guardián capaz" (Cohen & Felson, 1979); distancia a la
+  estación más cercana (OSM, 2 estaciones en Tumaco; archivo por ciudad `tumaco_police.json`).
+
+Cada factor se transforma a **percentil** antes de ponderar, de modo que los **pesos controlan la
+influencia real** (no la varianza de cada factor). Correlaciones resultantes equilibradas: densidad
+0,32 · periferia 0,36 · policía 0,34 · tráfico 0,07. *(Iluminación — Welsh & Farrington, 2008 — queda
+pendiente: OSM no tiene luminarias para Tumaco; el dato real sería luces nocturnas satelitales VIIRS.)*
 
 La **cobertura** se extendió a todas las manzanas pobladas (malla 425→**475 celdas**). La curva
 temporal tiene un **piso nocturno** (la violencia dirigida no se anula de madrugada); su forma exacta
