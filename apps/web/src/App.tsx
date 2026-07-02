@@ -342,9 +342,11 @@ export default function App() {
       map.addLayer({
         id: "risk-fill", type: "fill", source: "risk",
         paint: {
+          // Rampa calmada: la mayoría de la ciudad queda tenue/verde y solo los HOTSPOTS resaltan.
           "fill-color": ["interpolate", ["linear"], ["get", "risk_norm"],
-            0, "#16a34a", 0.4, "#facc15", 0.7, "#f97316", 1, "#ef4444"],
-          "fill-opacity": ["interpolate", ["linear"], ["get", "risk_norm"], 0, 0.12, 1, 0.6],
+            0, "#16a34a", 0.7, "#22c55e", 0.85, "#f59e0b", 0.93, "#f97316", 1, "#ef4444"],
+          "fill-opacity": ["interpolate", ["linear"], ["get", "risk_norm"],
+            0, 0.05, 0.7, 0.10, 0.85, 0.32, 1, 0.6],
         },
       } as never);
       map.addLayer({

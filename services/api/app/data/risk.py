@@ -30,9 +30,11 @@ def _min_step(vals: list[float]) -> float:
 
 
 def _level(risk_norm: float) -> str:
-    if risk_norm >= 0.7:
+    # Calibrado para que "alto" sean los HOTSPOTS (minoría) y la ciudad se pueda transitar:
+    # con risk_norm = percentil, en el pico ~10% alto / ~20% medio / ~70% bajo.
+    if risk_norm >= 0.90:
         return "alto"
-    if risk_norm >= 0.4:
+    if risk_norm >= 0.70:
         return "medio"
     return "bajo"
 
